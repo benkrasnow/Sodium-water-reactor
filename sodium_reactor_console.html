@@ -1,0 +1,1061 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sodium-Water Reactor Console</title>
+<style>
+:root{
+  --bg:#0e1117; --panel:#161b25; --panel2:#1c2230; --line:#2a3242;
+  --txt:#e6edf3; --dim:#8b97a8; --accent:#4dabf7; --good:#51cf66;
+  --warn:#ffd43b; --bad:#ff6b6b;
+  --mono:"Cascadia Mono",Consolas,"SF Mono",Menlo,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{
+  background:var(--bg); color:var(--txt);
+  font:13px/1.45 "Segoe UI",Roboto,system-ui,sans-serif;
+  display:flex; flex-direction:column; overflow:hidden;
+}
+
+/* ---------- header ---------- */
+header{
+  display:flex; align-items:center; gap:12px; padding:8px 14px;
+  background:var(--panel); border-bottom:1px solid var(--line); flex:0 0 auto;
+}
+header h1{font-size:14px;margin:0;font-weight:600;letter-spacing:.3px;white-space:nowrap}
+header h1 span{color:var(--dim);font-weight:400}
+.spacer{flex:1}
+button{
+  background:var(--panel2); color:var(--txt); border:1px solid var(--line);
+  border-radius:5px; padding:5px 11px; font:inherit; cursor:pointer;
+}
+button:hover:not(:disabled){border-color:var(--accent)}
+button:disabled{opacity:.4;cursor:default}
+button.primary{background:#12467a;border-color:#1c6fbf}
+button.stop{background:#5c1d1d;border-color:#a33;font-weight:700}
+button.stop:hover{background:#7a2323}
+button.dirty{background:#4a3c0e;border-color:var(--warn);color:#ffe9a8;font-weight:600}
+button.on{background:#14532d;border-color:var(--good)}
+.pill{
+  font:11px var(--mono); padding:3px 8px; border-radius:10px;
+  background:var(--panel2); border:1px solid var(--line); color:var(--dim);
+  white-space:nowrap;
+}
+.pill b{color:var(--txt);font-weight:600}
+.led{display:inline-block;width:8px;height:8px;border-radius:50%;background:#555;margin-right:6px;vertical-align:1px}
+.led.ok{background:var(--good);box-shadow:0 0 6px var(--good)}
+.led.err{background:var(--bad);box-shadow:0 0 6px var(--bad)}
+
+/* ---------- layout ---------- */
+main{flex:1;display:flex;min-height:0}
+#side{
+  width:326px; flex:0 0 326px; background:var(--panel);
+  border-right:1px solid var(--line); overflow-y:auto; padding:10px;
+}
+#content{flex:1;display:flex;flex-direction:column;min-width:0;padding:10px;gap:10px;overflow:hidden}
+
+/* ---------- controls ---------- */
+.sec{border:1px solid var(--line);border-radius:6px;margin-bottom:9px;background:var(--panel2)}
+.sec>h2{
+  margin:0;font-size:11.5px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;
+  color:var(--dim); padding:7px 10px; cursor:pointer; user-select:none;
+  display:flex;align-items:center;gap:6px;
+}
+.sec>h2::before{content:"▾";font-size:9px;color:var(--dim)}
+.sec.collapsed>h2::before{content:"▸"}
+.sec.needsave>h2{color:var(--warn)}
+.sec.needsave>h2::after{content:"unsaved";font-size:10px;color:#0e1117;background:var(--warn);
+  border-radius:8px;padding:1px 6px;margin-left:auto;letter-spacing:.3px}
+.sec.collapsed>.body{display:none}
+.sec>.body{padding:4px 10px 10px}
+.row{display:flex;align-items:center;gap:8px;margin:6px 0}
+.row label{flex:1;color:var(--dim);font-size:12px}
+.row .u{color:#5f6b7d;font-size:11px;width:26px;flex:0 0 26px}
+input[type=number],input[type=text],select{
+  width:92px;flex:0 0 92px; background:#0d1219; color:var(--txt);
+  border:1px solid var(--line); border-radius:4px; padding:4px 6px;
+  font:12px var(--mono); text-align:right;
+}
+select{text-align:left}
+input:focus{outline:none;border-color:var(--accent);background:#0a1a2a}
+input.pending{border-color:var(--warn)}
+input[type=range]{flex:1;accent-color:var(--accent);width:auto}
+.ro{
+  width:92px;flex:0 0 92px; background:#0b0f16; color:var(--txt);
+  border:1px dashed var(--line); border-radius:4px; padding:4px 6px;
+  font:12px var(--mono); text-align:right;
+}
+.ro.off{color:#5f6b7d}
+.ro.stalled{color:var(--warn);border-color:var(--warn)}
+.btnrow{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 2px}
+.btnrow button{flex:1;min-width:64px;padding:6px 4px;font-size:12px}
+.hint{color:#5f6b7d;font-size:11px;margin:6px 0 0;line-height:1.4}
+
+/* ---------- readouts ---------- */
+#readouts{
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(126px,1fr));
+  gap:7px; flex:0 0 auto;
+}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:6px 9px}
+.card .n{font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .v{font:600 19px/1.2 var(--mono);margin-top:1px}
+.card .v small{font-size:11px;color:var(--dim);font-weight:400;margin-left:3px}
+
+/* ---------- charts ---------- */
+.chart{
+  background:var(--panel); border:1px solid var(--line); border-radius:6px;
+  display:flex; flex-direction:column; min-height:0; flex:1; position:relative;
+}
+.chart .hd{
+  display:flex;align-items:center;gap:10px;padding:5px 10px;border-bottom:1px solid var(--line);
+  font-size:11.5px;color:var(--dim);flex:0 0 auto;
+}
+.chart .hd b{color:var(--txt);font-weight:600;font-size:12px}
+.chart .hd input.winrange{flex:0 0 130px;width:130px;margin:0}
+.chart .hd input.winnum{flex:0 0 54px;width:54px;padding:2px 5px;font-size:11px}
+.cwrap{flex:1;position:relative;min-height:90px}
+canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.tip{
+  position:absolute;pointer-events:none;background:#0b0f16ee;border:1px solid var(--line);
+  border-radius:5px;padding:6px 8px;font:11px var(--mono);white-space:nowrap;z-index:5;
+  display:none;box-shadow:0 4px 14px #0008;
+}
+.tip .r{display:flex;gap:8px;justify-content:space-between}
+.tip .r i{width:7px;height:7px;border-radius:2px;display:inline-block;margin-right:5px}
+.tip .t{color:var(--dim);border-bottom:1px solid var(--line);margin-bottom:3px;padding-bottom:3px}
+#legend{display:flex;flex-wrap:wrap;gap:5px;flex:0 0 auto}
+.lg{
+  display:flex;align-items:center;gap:5px;padding:3px 8px;border-radius:12px;
+  background:var(--panel);border:1px solid var(--line);cursor:pointer;font-size:11.5px;
+  user-select:none;
+}
+.lg i{width:9px;height:9px;border-radius:2px;flex:0 0 9px}
+.lg.off{opacity:.38}
+/* Fixed-width, right-aligned, tabular figures: the reserved box always has room
+   for a minus sign, so chips never resize as values change and the row stops
+   shuffling underneath the pointer. */
+.lg b{
+  font:600 11.5px var(--mono); font-variant-numeric:tabular-nums;
+  flex:0 0 7.5ch; width:7.5ch; text-align:right; overflow:hidden;
+}
+.lg em{font-style:normal;color:var(--dim);font-size:10.5px;flex:0 0 auto}
+
+/* ---------- log ---------- */
+#logwrap{flex:0 0 auto;background:var(--panel);border:1px solid var(--line);border-radius:6px}
+#logwrap .hd{display:flex;align-items:center;gap:10px;padding:5px 10px;font-size:11.5px;color:var(--dim);cursor:pointer}
+#log{height:112px;overflow-y:auto;padding:4px 10px 8px;font:11px var(--mono);border-top:1px solid var(--line)}
+#log div{white-space:pre-wrap;word-break:break-all}
+#log .tx{color:var(--accent)}
+#log .rx{color:#7f8c9e}
+#log .e{color:var(--bad)}
+#log .a{color:var(--good)}
+#logwrap.collapsed #log{display:none}
+.chk{display:flex;align-items:center;gap:5px;color:var(--dim);font-size:11.5px;cursor:pointer}
+.chk input{width:auto;flex:0 0 auto}
+
+#nosupport{
+  display:none;margin:10px;padding:12px;border:1px solid var(--bad);border-radius:6px;
+  background:#2a1414;color:#ffc9c9;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Sodium-Water Reactor <span>· test stand console</span></h1>
+  <button id="btnConnect" class="primary">Connect</button>
+  <span class="pill"><span id="led" class="led"></span><span id="connTxt">disconnected</span></span>
+  <span class="pill">rate <b id="statRate">–</b> Hz</span>
+  <span class="pill">run <b id="statTime">0:00</b></span>
+  <span class="pill">pkts <b id="statPkts">0</b> · err <b id="statErr">0</b></span>
+  <span class="pill" id="statFlags">flags 0</span>
+  <div class="spacer"></div>
+  <button id="btnClear">Clear run</button>
+  <button id="btnCsv">Export CSV</button>
+  <button id="btnStop" class="stop">STOP</button>
+</header>
+
+<div id="nosupport">
+  <b>Web Serial is not available in this browser.</b><br>
+  This page needs Chrome or Edge (desktop). Open it directly as a local file, or serve it from
+  <code>http://localhost</code>. Firefox and Safari do not implement Web Serial.
+</div>
+
+<main>
+  <!-- ================= controls ================= -->
+  <div id="side">
+
+    <div class="sec" id="secMode">
+      <h2>Linear actuator</h2>
+      <div class="body">
+        <div class="btnrow">
+          <button class="modebtn" data-mode="0">Hold</button>
+          <button class="modebtn" data-mode="1">Force PID</button>
+          <button class="modebtn" data-mode="2">Reset</button>
+          <button class="modebtn" data-mode="3">Manual</button>
+        </div>
+        <div class="row">
+          <label for="i_fsp">Force setpoint</label>
+          <input type="number" id="i_fsp" data-key="fsp" step="10" value="0"><span class="u">g</span>
+        </div>
+        <div class="row">
+          <label for="i_lin">Manual PWM</label>
+          <input type="number" id="i_lin" data-key="lin" step="1" min="-1023" max="1023" value="0"><span class="u"></span>
+        </div>
+        <p class="hint">Force PID drives FWD/REV to hold the setpoint. Reset applies the fixed
+        signed retract PWM until the distance target is reached, then holds. Manual drives the
+        signed PWM directly (+ = FWD, − = REV).</p>
+      </div>
+    </div>
+
+    <div class="sec" id="secDrive">
+      <h2>Disc &amp; water</h2>
+      <div class="body">
+        <div class="row">
+          <label for="i_rpm">Disc speed</label>
+          <input type="number" id="i_rpm" data-key="rpm" step="100" value="0"><span class="u">rpm</span>
+        </div>
+        <div class="row">
+          <label for="i_pump">Water pump</label>
+          <input type="number" id="i_pump" data-key="pump" step="25" min="0" max="1023" value="0"><span class="u"></span>
+        </div>
+        <div class="row">
+          <input type="range" id="s_pump" min="0" max="1023" step="1" value="0">
+        </div>
+        <div class="row">
+          <label>Flow rate</label>
+          <output id="o_flow" class="ro">0.0</output><span class="u">ml/min</span>
+        </div>
+        <p class="hint">Flow is interpolated from the measured 0.2 mm nozzle table. The pump
+        delivers nothing below PWM 300 and plateaus at 14.3 ml/min from PWM 800 up, so the
+        useful range is the 300–800 span; the slider still goes anywhere.</p>
+        <p class="hint">Disc speed is mechanical RPM; the firmware multiplies by the pole-pair count
+        before sending to the VESC. 0 rpm releases the motor (coast).</p>
+      </div>
+    </div>
+
+    <div class="sec collapsed" id="secPid">
+      <h2>Force PID tuning</h2>
+      <div class="body">
+        <div class="row"><label for="i_kp">Kp</label><input type="number" id="i_kp" data-key="kp" step="0.05" value="0.5"><span class="u"></span></div>
+        <div class="row"><label for="i_ki">Ki</label><input type="number" id="i_ki" data-key="ki" step="0.05" value="1"><span class="u"></span></div>
+        <div class="row"><label for="i_kd">Kd</label><input type="number" id="i_kd" data-key="kd" step="0.01" value="0"><span class="u"></span></div>
+        <div class="row"><label for="i_omax">Max PWM</label><input type="number" id="i_omax" data-key="omax" step="25" min="0" max="1023" value="700"><span class="u"></span></div>
+        <div class="row"><label for="i_pmin">Min PWM (stiction)</label><input type="number" id="i_pmin" data-key="pmin" step="10" min="0" max="1023" value="0"><span class="u"></span></div>
+        <div class="row"><label for="i_db">Deadband</label><input type="number" id="i_db" data-key="db" step="1" min="0" value="2"><span class="u">g</span></div>
+        <div class="row"><label for="i_fsign">Forward direction</label>
+          <select id="i_fsign" data-key="fsign"><option value="1">FWD increases force</option><option value="-1">FWD decreases force</option></select>
+        </div>
+        <p class="hint">The loop runs once per acquisition cycle (~9 Hz) — the HX711 cannot give
+        accurate data faster than 10 Hz.</p>
+      </div>
+    </div>
+
+    <div class="sec collapsed" id="secReset">
+      <h2>Reset (retract)</h2>
+      <div class="body">
+        <div class="row"><label for="i_dtgt">Target distance</label><input type="number" id="i_dtgt" data-key="dtgt" step="0.1" value="0"><span class="u">mm</span></div>
+        <div class="row"><label for="i_rpwm">Retract PWM (signed)</label><input type="number" id="i_rpwm" data-key="rpwm" step="1" min="-1023" max="1023" value="-1000"><span class="u"></span></div>
+        <div class="row"><label for="i_dcmp">Finish when</label>
+          <select id="i_dcmp" data-key="dcmp"><option value="0">distance ≥ target</option><option value="1">distance ≤ target</option></select>
+        </div>
+        <div class="row"><label for="i_rtmo">Timeout</label><input type="number" id="i_rtmo" data-key="rtmo" step="1000" min="0" value="20000"><span class="u">ms</span></div>
+        <p class="hint">The retract PWM is signed and applied as-is: its sign picks the
+        direction that retracts on this machine (negative drives REV). Check it in
+        Manual mode first — the wrong sign drives into the junction instead of away
+        from it, and only the timeout would stop it.</p>
+      </div>
+    </div>
+
+    <div class="sec collapsed" id="secCal">
+      <h2>Calibration</h2>
+      <div class="body">
+        <div class="row"><label for="i_taren">Average samples</label><input type="number" id="i_taren" step="1" min="1" max="500" value="10"><span class="u"></span></div>
+        <div class="btnrow">
+          <button id="btnTare">Tare force</button>
+          <button id="btnZero">Zero current</button>
+        </div>
+        <div class="row"><label for="i_calw">Known mass</label><input type="number" id="i_calw" step="1" value="200"><span class="u">g</span></div>
+        <div class="btnrow">
+          <button id="btnCal">Solve HX711 scale</button>
+          <button id="btnDiag">ADC settling test</button>
+        </div>
+        <p class="hint">Tare unloaded, then rest the known mass on the cell and solve
+        the scale. Each averages the sample count above, one conversion per 110 ms
+        cycle — 10 samples ≈ 1.1 s — and telemetry keeps streaming throughout.
+        Not allowed while force control is running.</p>
+        <div class="row"><label for="i_fcal">HX711 counts/g</label><input type="number" id="i_fcal" data-key="fcal" step="1" value="230"><span class="u"></span></div>
+        <div class="row"><label for="i_foff">Tare offset</label><input type="number" id="i_foff" data-key="foff" step="1" value="0"><span class="u">cts</span></div>
+        <div class="row"><label for="i_falpha">Force filter α</label><input type="number" id="i_falpha" data-key="falpha" step="0.05" min="0.01" max="1" value="0.7"><span class="u"></span></div>
+        <div class="row"><label for="i_izero">Current 0 A level</label><input type="number" id="i_izero" data-key="izero" step="0.001" value="2.5"><span class="u">V</span></div>
+        <div class="row"><label for="i_ivpa">Current V per A</label><input type="number" id="i_ivpa" data-key="ivpa" step="0.0001" value="0.0125"><span class="u">V</span></div>
+        <div class="row"><label for="i_vgain">Voltage gain</label><input type="number" id="i_vgain" data-key="vgain" step="0.01" value="1"><span class="u">V/V</span></div>
+        <div class="row"><label for="i_voff">Voltage offset</label><input type="number" id="i_voff" data-key="voff" step="0.001" value="0"><span class="u">V</span></div>
+        <div class="row"><label for="i_dgain">Distance gain</label><input type="number" id="i_dgain" data-key="dgain" step="0.1" value="28.2"><span class="u">mm/V</span></div>
+        <div class="row"><label for="i_doff">Distance offset</label><input type="number" id="i_doff" data-key="doff" step="0.1" value="-35"><span class="u">mm</span></div>
+        <div class="row"><label for="i_poles">Motor pole pairs</label><input type="number" id="i_poles" data-key="poles" step="1" min="1" value="7"><span class="u"></span></div>
+        <div class="row"><label for="i_vpoll">Poll VESC</label>
+          <select id="i_vpoll" data-key="vpoll"><option value="1">yes</option><option value="0">no</option></select>
+        </div>
+        <div class="row"><label for="i_wd">Comms watchdog</label><input type="number" id="i_wd" data-key="wd" step="500" min="0" value="2500"><span class="u">ms</span></div>
+        <div class="btnrow">
+          <button id="btnSave">Save to EEPROM</button>
+          <button id="btnLoad">Load</button>
+          <button id="btnDef">Defaults</button>
+        </div>
+        <p class="hint" id="eepState">EEPROM state unknown</p>
+        <p class="hint">Zero current with the junction open; it averages the same
+        per-cycle readings the telemetry reports, so the residual is zero by
+        construction. The settling test prints each channel's first-conversion-after-
+        mux-change error to the log. Watchdog 0 disables the stop-on-silence safety.</p>
+      </div>
+    </div>
+
+    <div class="sec collapsed" id="secRaw">
+      <h2>Raw command</h2>
+      <div class="body">
+        <div class="row">
+          <input type="text" id="i_raw" style="flex:1;width:auto;text-align:left" placeholder="SET kp=0.4 ki=1.2">
+          <button id="btnRaw" style="flex:0 0 auto">Send</button>
+        </div>
+        <p class="hint">Sent verbatim with <code>$</code> and checksum added.</p>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ================= data ================= -->
+  <div id="content">
+    <div id="readouts"></div>
+    <div id="legend"></div>
+
+    <div class="chart">
+      <div class="hd"><b>Full run</b><span id="hd1">no data</span></div>
+      <div class="cwrap"><canvas id="cvHist"></canvas><div class="tip" id="tipHist"></div></div>
+    </div>
+
+    <div class="chart">
+      <div class="hd">
+        <b>Recent</b>
+        <input type="range" id="s_win" class="winrange" min="1" max="120" step="1" value="5">
+        <input type="number" id="i_win" class="winnum" min="1" max="120" step="1" value="5">
+        <span>s window</span>
+        <span id="hd2">no data</span>
+      </div>
+      <div class="cwrap"><canvas id="cvLive"></canvas><div class="tip" id="tipLive"></div></div>
+    </div>
+
+    <div id="logwrap">
+      <div class="hd" id="logHd">
+        <b style="color:var(--txt)">Serial log</b>
+        <label class="chk" onclick="event.stopPropagation()"><input type="checkbox" id="chkTele"> show telemetry</label>
+        <div class="spacer"></div>
+        <span style="color:#5f6b7d">click to collapse</span>
+      </div>
+      <div id="log"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+"use strict";
+
+/* =====================================================================
+   Series / readout definitions
+   ===================================================================== */
+// d = decimals used for the legend readout; fixing it per series keeps the
+// chips from resizing as values change.
+const SERIES = [
+  {k:'ji',  name:'Junction current', unit:'A',   color:'#ff6b6b', on:true,  d:2},
+  {k:'jv',  name:'Junction voltage', unit:'V',   color:'#ffa94d', on:true,  d:3},
+  {k:'jw',  name:'Junction power',   unit:'W',   color:'#ffd43b', on:false, d:2},
+  {k:'f',   name:'Force',            unit:'g',   color:'#51cf66', on:true,  d:1},
+  {k:'fsp', name:'Force setpoint',   unit:'g',   color:'#20c997', on:false, d:1},
+  {k:'dmm', name:'Distance',         unit:'mm',  color:'#4dabf7', on:true,  d:2},
+  {k:'rpm', name:'Disc RPM',         unit:'rpm', color:'#748ffc', on:true,  d:0},
+  {k:'mi',  name:'Motor current',    unit:'A',   color:'#b197fc', on:false, d:2},
+  {k:'ii',  name:'Input current',    unit:'A',   color:'#e599f7', on:false, d:2},
+  {k:'iv',  name:'Input voltage',    unit:'V',   color:'#f783ac', on:false, d:2},
+  {k:'lp',  name:'Linear PWM',       unit:'',    color:'#ff922b', on:false, d:0},
+  {k:'pmp', name:'Pump PWM',         unit:'',    color:'#38d9a9', on:false, d:0},
+];
+const SMAP = {}; SERIES.forEach(s => SMAP[s.k] = s);
+
+const READOUTS = [
+  {k:'ji',  n:'Junction current', u:'A',   d:2},
+  {k:'jv',  n:'Junction voltage', u:'V',   d:3},
+  {k:'jw',  n:'Junction power',   u:'W',   d:2},
+  {k:'f',   n:'Force',            u:'g',   d:1},
+  {k:'perr',n:'Force error',      u:'g',   d:1},
+  {k:'fr',  n:'Force raw',        u:'cts', d:0},
+  {k:'dmm', n:'Distance',         u:'mm',  d:2},
+  {k:'rpm', n:'Disc speed',       u:'rpm', d:0},
+  {k:'mi',  n:'Motor current',    u:'A',   d:2},
+  {k:'ii',  n:'Input current',    u:'A',   d:2},
+  {k:'iv',  n:'Input voltage',    u:'V',   d:2},
+  {k:'lp',  n:'Linear PWM',       u:'',    d:0},
+  {k:'pmp', n:'Pump PWM',         u:'',    d:0},
+];
+
+/* ---------------------------------------------------------------------
+   Water pump flow rate.
+   Measured points from "water pump flow rate table for 0.2mm nozzle.csv".
+   Below PWM 300 the pump does not move water; the table's 800/900/1000 rows
+   are all 14.3 ml/min, so 800 is treated as the plateau.  A single straight
+   line through the endpoints is off by up to 1.4 ml/min mid-range, so this
+   interpolates the measured points instead.
+   --------------------------------------------------------------------- */
+const PUMP_FLOW_TABLE = [[300,8.0],[400,10.7],[500,11.7],[600,12.7],[700,13.0],[800,14.3]];
+const PUMP_MIN_PWM = PUMP_FLOW_TABLE[0][0];
+const PUMP_MAX_PWM = PUMP_FLOW_TABLE[PUMP_FLOW_TABLE.length-1][0];
+const PUMP_MAX_FLOW = PUMP_FLOW_TABLE[PUMP_FLOW_TABLE.length-1][1];
+
+function pumpFlow(pwm){
+  if (!isFinite(pwm) || pwm < PUMP_MIN_PWM) return 0;
+  if (pwm >= PUMP_MAX_PWM) return PUMP_MAX_FLOW;
+  for (let i = 0; i < PUMP_FLOW_TABLE.length-1; i++) {
+    const [x0,y0] = PUMP_FLOW_TABLE[i], [x1,y1] = PUMP_FLOW_TABLE[i+1];
+    if (pwm <= x1) return y0 + (y1-y0)*(pwm-x0)/(x1-x0);
+  }
+  return PUMP_MAX_FLOW;
+}
+
+function updateFlow(){
+  const pwm = parseFloat($('s_pump').value);
+  const f = pumpFlow(pwm);
+  const el = $('o_flow');
+  el.textContent = f.toFixed(1);
+  const stalled = isFinite(pwm) && pwm > 0 && pwm < PUMP_MIN_PWM;
+  el.classList.toggle('off', f === 0 && !stalled);
+  el.classList.toggle('stalled', stalled);
+  el.title = stalled
+    ? 'PWM '+Math.round(pwm)+' is below the pump’s 300 threshold — no flow'
+    : (pwm >= PUMP_MAX_PWM ? 'Flow has plateaued; more PWM does not add flow' : '');
+}
+
+const MODE_NAMES = ['Hold','Force PID','Reset','Manual'];
+const FLAG_NAMES = [[1,'VESC timeout'],[2,'reset timeout'],[4,'WATCHDOG'],
+                    [8,'no HX711 data'],[16,'PID saturated'],[32,'load cell railed']];
+
+/* =====================================================================
+   State
+   ===================================================================== */
+let port = null, writer = null, reader = null, keepReading = false;
+let samples = [];            // {t: seconds since run start, <field>: number}
+let gRange = {};             // key -> {mn,mx} over the WHOLE run; scales both charts
+let winSeconds = 5;          // width of the "recent" chart
+let t0 = null;               // first packet millis()
+let last = {};               // most recent telemetry record
+let pktCount = 0, errCount = 0;
+let rateStamps = [];
+let pingTimer = null;
+let dirty = true;            // charts need a redraw
+
+const $ = id => document.getElementById(id);
+const log = $('log');
+
+/* =====================================================================
+   Serial link
+   ===================================================================== */
+if (!('serial' in navigator)) {
+  $('nosupport').style.display = 'block';
+  $('btnConnect').disabled = true;
+}
+
+async function connect(){
+  try {
+    port = await navigator.serial.requestPort();
+    await port.open({baudRate:115200});          // CDC: the rate is ignored by the Teensy
+  } catch(e){
+    if (e && e.name === 'NotFoundError') return; // user cancelled the picker
+    logLine('e','open failed: '+e);
+    port = null; return;
+  }
+  writer = port.writable.getWriter();
+  keepReading = true;
+  setConn(true);
+  readLoop();
+  send('ID');
+  send('GET');
+  pingTimer = setInterval(() => { if (port) send('PING'); }, 500);
+}
+
+async function disconnect(){
+  keepReading = false;
+  clearInterval(pingTimer); pingTimer = null;
+  try { if (reader) await reader.cancel(); } catch(e){}
+  try { if (writer) { writer.releaseLock(); writer = null; } } catch(e){}
+  try { if (port) await port.close(); } catch(e){}
+  port = null;
+  setConn(false);
+}
+
+async function readLoop(){
+  let buf = '';
+  const dec = new TextDecoder();
+  while (port && port.readable && keepReading) {
+    reader = port.readable.getReader();
+    try {
+      while (true) {
+        const {value, done} = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, {stream:true});
+        let i;
+        while ((i = buf.indexOf('\n')) >= 0) {
+          const line = buf.slice(0, i).replace(/\r/g,'').trim();
+          buf = buf.slice(i+1);
+          if (line) handleLine(line);
+        }
+        if (buf.length > 4000) buf = '';       // runaway garbage guard
+      }
+    } catch(e){
+      logLine('e','read error: '+e);
+    } finally {
+      try { reader.releaseLock(); } catch(e){}
+      reader = null;
+    }
+  }
+  if (keepReading) disconnect();               // device unplugged
+}
+
+function checksum(s){
+  let c = 0;
+  for (let i=0;i<s.length;i++) c ^= s.charCodeAt(i);
+  return c.toString(16).toUpperCase().padStart(2,'0');
+}
+
+async function send(payload){
+  if (!writer) return;
+  const line = '$' + payload + '*' + checksum(payload) + '\n';
+  try { await writer.write(new TextEncoder().encode(line)); }
+  catch(e){ logLine('e','write failed: '+e); return; }
+  if (payload !== 'PING') logLine('tx','» '+payload);
+}
+const setParam = (k,v) => send('SET '+k+'='+v);
+
+function setConn(ok){
+  $('btnConnect').textContent = ok ? 'Disconnect' : 'Connect';
+  $('btnConnect').classList.toggle('primary', !ok);
+  $('led').className = 'led' + (ok ? ' ok' : '');
+  $('connTxt').textContent = ok ? 'connected' : 'disconnected';
+}
+
+/* =====================================================================
+   Protocol parsing
+   ===================================================================== */
+function handleLine(line){
+  let body = line;
+  if (body[0] === '$') body = body.slice(1);
+  const star = body.lastIndexOf('*');
+  if (star >= 0) {
+    const want = body.slice(star+1).trim().toUpperCase();
+    const payload = body.slice(0, star);
+    if (checksum(payload) !== want) { errCount++; logLine('e','✗ checksum: '+line); return; }
+    body = payload;
+  }
+  const sp = body.indexOf(' ');
+  const tag = sp < 0 ? body : body.slice(0, sp);
+  const rest = sp < 0 ? '' : body.slice(sp+1);
+
+  if (tag === 'D')      { onTelemetry(parseKV(rest)); }
+  else if (tag === 'K') { onConfig(parseKV(rest)); logLine('rx','« config'); }
+  else if (tag === 'A') { logLine('a','« '+rest); }
+  else if (tag === 'E') { logLine('e','« ERROR '+rest); }
+  else if (tag === 'I') { logLine('a','« '+rest); }
+  else                  { logLine('rx','« '+line); }
+}
+
+function parseKV(s){
+  const o = {};
+  for (const tok of s.split(/[\s,]+/)) {
+    if (!tok) continue;
+    const i = tok.indexOf('=');
+    if (i < 0) continue;
+    const k = tok.slice(0,i), v = parseFloat(tok.slice(i+1));
+    o[k] = isNaN(v) ? tok.slice(i+1) : v;
+  }
+  return o;
+}
+
+function onTelemetry(d){
+  pktCount++;
+  if (t0 === null) t0 = d.t;
+  d.rt = (d.t - t0) / 1000;                 // seconds since run start
+  if (samples.length && d.rt < samples[samples.length-1].rt) {  // Teensy rebooted
+    clearRun(); t0 = d.t; d.rt = 0;
+  }
+  samples.push(d);
+  last = d;
+  // Y scaling comes from the entire run, not from what is on screen, so a
+  // near-static trace does not get magnified into noise on the recent chart.
+  for (const s of SERIES) {
+    const v = d[s.k];
+    if (typeof v !== 'number' || !isFinite(v)) continue;
+    const r = gRange[s.k];
+    if (!r) gRange[s.k] = {mn:v, mx:v};
+    else { if (v < r.mn) r.mn = v; if (v > r.mx) r.mx = v; }
+  }
+  const now = performance.now();
+  rateStamps.push(now);
+  while (rateStamps.length && now - rateStamps[0] > 3000) rateStamps.shift();
+  dirty = true;
+  if ($('chkTele').checked) logLine('rx','« D n='+d.n+' f='+d.f+' ji='+d.ji);
+}
+
+function onConfig(c){
+  for (const el of document.querySelectorAll('[data-key]')) {
+    const k = el.dataset.key;
+    if (!(k in c)) continue;
+    if (document.activeElement === el) continue;      // never fight the user
+    const v = c[k];
+    el.value = (el.tagName === 'SELECT') ? String(Math.round(v)) : trimNum(v);
+    el.classList.remove('pending');
+  }
+  if ('pump' in c) { $('s_pump').value = c.pump; updateFlow(); }
+  if ('mode' in c) markMode(c.mode);
+  if ('dirty' in c) {
+    const d = c.dirty === 1;
+    $('btnSave').classList.toggle('dirty', d);
+    $('eepState').textContent = d
+      ? '⚠ Calibration differs from EEPROM — it will be lost on reset.'
+      : '✓ Calibration matches EEPROM. Restored automatically at boot.';
+    $('eepState').style.color = d ? 'var(--warn)' : 'var(--good)';
+    // Highlight the panel too, in case it is collapsed after a calibration
+    $('secCal').classList.toggle('needsave', d);
+  }
+}
+
+function trimNum(v){
+  if (typeof v !== 'number') return String(v);
+  return String(parseFloat(v.toFixed(6)));
+}
+
+function markMode(m){
+  for (const b of document.querySelectorAll('.modebtn'))
+    b.classList.toggle('on', Number(b.dataset.mode) === m);
+}
+
+/* =====================================================================
+   Logging
+   ===================================================================== */
+function logLine(cls, txt){
+  const near = log.scrollTop + log.clientHeight >= log.scrollHeight - 24;
+  const d = document.createElement('div');
+  d.className = cls; d.textContent = txt;
+  log.appendChild(d);
+  while (log.childNodes.length > 400) log.removeChild(log.firstChild);
+  if (near) log.scrollTop = log.scrollHeight;
+}
+
+/* =====================================================================
+   Charts
+   ===================================================================== */
+function fitCanvas(cv){
+  const r = cv.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const w = Math.max(1, Math.round(r.width*dpr)), h = Math.max(1, Math.round(r.height*dpr));
+  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+  return dpr;
+}
+
+// Nice tick step for an axis span
+function tickStep(span, target){
+  if (span <= 0) return 1;
+  const raw = span / target;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const n = raw / mag;
+  return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * mag;
+}
+
+function fmtTime(s){
+  if (s < 60) return s.toFixed(s < 10 ? 1 : 0)+'s';
+  const m = Math.floor(s/60);
+  return m+':'+String(Math.floor(s%60)).padStart(2,'0');
+}
+
+const charts = {
+  hist: {cv:$('cvHist'), tip:$('tipHist'), hd:$('hd1'), hover:null, geom:null, win:null},
+  live: {cv:$('cvLive'), tip:$('tipLive'), hd:$('hd2'), hover:null, geom:null, win:null},
+};
+
+function activeSeries(){ return SERIES.filter(s => s.on); }
+
+// Index of the first sample with rt >= t
+function lowerBound(t){
+  let lo = 0, hi = samples.length;
+  while (lo < hi) { const m = (lo+hi) >> 1; if (samples[m].rt < t) lo = m+1; else hi = m; }
+  return lo;
+}
+
+function drawChart(ch, tMin, tMax){
+  const cv = ch.cv, ctx = cv.getContext('2d');
+  const dpr = fitCanvas(cv);
+  const W = cv.width, H = cv.height;
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.clearRect(0,0,W,H);
+
+  const act = activeSeries();
+  const single = act.length === 1;
+  const padL = Math.round((single ? 58 : 10)*dpr), padR = Math.round(10*dpr);
+  const padT = Math.round(8*dpr), padB = Math.round(20*dpr);
+  const pw = W - padL - padR, ph = H - padT - padB;
+  ch.geom = {padL, padT, pw, ph, tMin, tMax, dpr};
+
+  if (pw <= 4 || ph <= 4) return;
+
+  // frame
+  ctx.strokeStyle = '#2a3242'; ctx.lineWidth = 1*dpr;
+  ctx.strokeRect(padL+0.5, padT+0.5, pw, ph);
+
+  const i0 = lowerBound(tMin);
+  const hi = samples.length;
+  if (hi - i0 <= 0 || tMax <= tMin) {
+    ctx.fillStyle = '#5f6b7d'; ctx.font = (12*dpr)+'px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('waiting for data…', padL+pw/2, padT+ph/2);
+    return;
+  }
+
+  // ---- time grid ----
+  const span = tMax - tMin;
+  const ts = tickStep(span, Math.max(2, Math.floor(pw/(90*dpr))));
+  ctx.font = (10*dpr)+'px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  for (let t = Math.ceil(tMin/ts)*ts; t <= tMax; t += ts) {
+    const x = padL + (t-tMin)/span*pw;
+    ctx.strokeStyle = '#222a38'; ctx.beginPath();
+    ctx.moveTo(x+0.5, padT); ctx.lineTo(x+0.5, padT+ph); ctx.stroke();
+    ctx.fillStyle = '#5f6b7d';
+    ctx.fillText(fmtTime(t), x, padT+ph+3*dpr);
+  }
+
+  // ---- bucket the visible samples into pixel columns ----
+  const cols = Math.max(2, Math.floor(pw/dpr));
+  const buckets = act.map(() => new Array(cols).fill(null));
+  // Vertical scale is taken from the whole run for BOTH charts, so the recent
+  // view stays comparable to the history view instead of zooming into noise.
+  const ranges = act.map(s => {
+    const g = gRange[s.k];
+    return g ? {mn:g.mn, mx:g.mx} : {mn:Infinity, mx:-Infinity};
+  });
+  for (let i = i0; i < hi; i++) {
+    const s = samples[i];
+    if (s.rt < tMin || s.rt > tMax) continue;
+    let c = Math.floor((s.rt - tMin)/span*(cols-1));
+    if (c < 0) c = 0; else if (c >= cols) c = cols-1;
+    for (let j = 0; j < act.length; j++) {
+      const v = s[act[j].k];
+      if (typeof v !== 'number' || !isFinite(v)) continue;
+      const b = buckets[j][c];
+      if (b) { if (v<b.mn) b.mn=v; if (v>b.mx) b.mx=v; b.sum+=v; b.n++; }
+      else   { buckets[j][c] = {mn:v, mx:v, sum:v, n:1}; }
+    }
+  }
+
+  // ---- draw each series ----
+  const colX = c => padL + (c/(cols-1))*pw;
+  for (let j = 0; j < act.length; j++) {
+    const r = ranges[j];
+    if (!isFinite(r.mn)) continue;
+    let lo = r.mn, hi2 = r.mx;
+    if (hi2 - lo < 1e-9) { lo -= 1; hi2 += 1; }
+    const pad = (hi2-lo)*0.08; lo -= pad; hi2 += pad;
+    r.lo = lo; r.hi = hi2;
+    const Y = v => padT + ph - (v-lo)/(hi2-lo)*ph;
+
+    const pts = [];
+    for (let c = 0; c < cols; c++) if (buckets[j][c]) pts.push([c, buckets[j][c]]);
+    if (!pts.length) continue;
+
+    // min/max envelope (only meaningful when columns hold several samples)
+    if (pts.length > 3) {
+      ctx.fillStyle = act[j].color + '2e';
+      ctx.beginPath();
+      ctx.moveTo(colX(pts[0][0]), Y(pts[0][1].mx));
+      for (let p = 1; p < pts.length; p++) ctx.lineTo(colX(pts[p][0]), Y(pts[p][1].mx));
+      for (let p = pts.length-1; p >= 0; p--) ctx.lineTo(colX(pts[p][0]), Y(pts[p][1].mn));
+      ctx.closePath(); ctx.fill();
+    }
+
+    ctx.strokeStyle = act[j].color; ctx.lineWidth = 1.5*dpr;
+    ctx.lineJoin = 'round'; ctx.beginPath();
+    for (let p = 0; p < pts.length; p++) {
+      const x = colX(pts[p][0]), y = Y(pts[p][1].sum/pts[p][1].n);
+      if (p === 0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+
+    // value axis, but only when a single trace is shown (units would collide otherwise)
+    if (single) {
+      const vs = tickStep(hi2-lo, Math.max(2, Math.floor(ph/(34*dpr))));
+      ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+      ctx.font = (10*dpr)+'px monospace';
+      for (let v = Math.ceil(lo/vs)*vs; v <= hi2; v += vs) {
+        const y = Y(v);
+        ctx.strokeStyle = '#222a38'; ctx.beginPath();
+        ctx.moveTo(padL, y+0.5); ctx.lineTo(padL+pw, y+0.5); ctx.stroke();
+        ctx.fillStyle = '#5f6b7d';
+        ctx.fillText(fmtVal(v), padL-5*dpr, y);
+      }
+    }
+  }
+
+  if (!single) {
+    ctx.fillStyle = '#454f60'; ctx.font = (10*dpr)+'px sans-serif';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillText('each trace scaled to its full-run range — hover a legend chip for values',
+                 padL+5*dpr, padT+4*dpr);
+  }
+
+  // ---- hover crosshair ----
+  if (ch.hover !== null) {
+    const t = tMin + (ch.hover - padL)/pw*span;
+    let idx = lowerBound(t);
+    if (idx >= samples.length) idx = samples.length-1;
+    if (idx > 0 && Math.abs(samples[idx-1].rt-t) < Math.abs(samples[idx].rt-t)) idx--;
+    const s = samples[idx];
+    if (s && s.rt >= tMin-1e-9 && s.rt <= tMax+1e-9) {
+      const x = padL + (s.rt-tMin)/span*pw;
+      ctx.strokeStyle = '#8b97a8'; ctx.lineWidth = 1*dpr;
+      ctx.setLineDash([3*dpr,3*dpr]);
+      ctx.beginPath(); ctx.moveTo(x+0.5,padT); ctx.lineTo(x+0.5,padT+ph); ctx.stroke();
+      ctx.setLineDash([]);
+      for (let j = 0; j < act.length; j++) {
+        const r = ranges[j], v = s[act[j].k];
+        if (!isFinite(v) || r.lo === undefined) continue;
+        const y = padT + ph - (v-r.lo)/(r.hi-r.lo)*ph;
+        ctx.fillStyle = act[j].color;
+        ctx.beginPath(); ctx.arc(x, y, 3*dpr, 0, 6.2832); ctx.fill();
+      }
+      showTip(ch, s, x/dpr);
+    } else hideTip(ch);
+  } else hideTip(ch);
+}
+
+function fmtVal(v){
+  const a = Math.abs(v);
+  if (a === 0) return '0';
+  if (a >= 1000) return v.toFixed(0);
+  if (a >= 10) return v.toFixed(1);
+  if (a >= 1) return v.toFixed(2);
+  return v.toPrecision(3);
+}
+
+function showTip(ch, s, xcss){
+  const tip = ch.tip;
+  let h = '<div class="t">t = '+s.rt.toFixed(2)+' s &nbsp; #'+s.n+'</div>';
+  for (const ser of activeSeries()) {
+    const v = s[ser.k];
+    h += '<div class="r"><span><i style="background:'+ser.color+'"></i>'+ser.name+'</span>'+
+         '<span>'+(isFinite(v)?fmtVal(v):'–')+' '+ser.unit+'</span></div>';
+  }
+  tip.innerHTML = h;
+  tip.style.display = 'block';
+  const w = tip.offsetWidth, cw = ch.cv.getBoundingClientRect().width;
+  tip.style.left = Math.min(Math.max(4, xcss+12), cw-w-4)+'px';
+  tip.style.top = '6px';
+}
+function hideTip(ch){ ch.tip.style.display = 'none'; }
+
+for (const key of ['hist','live']) {
+  const ch = charts[key];
+  ch.cv.addEventListener('mousemove', e => {
+    const r = ch.cv.getBoundingClientRect();
+    ch.hover = (e.clientX - r.left) * (window.devicePixelRatio||1);
+    dirty = true;
+  });
+  ch.cv.addEventListener('mouseleave', () => { ch.hover = null; dirty = true; });
+}
+
+function setWindow(v, src){
+  if (!isFinite(v)) return;
+  v = Math.max(1, Math.min(120, Math.round(v)));
+  winSeconds = v;
+  if (src !== 'slider') $('s_win').value = v;
+  if (src !== 'num')    $('i_win').value = v;
+  dirty = true;
+}
+$('s_win').addEventListener('input',  () => setWindow(parseFloat($('s_win').value), 'slider'));
+$('i_win').addEventListener('input',  () => {
+  const raw = $('i_win').value.trim();
+  if (raw !== '') setWindow(parseFloat(raw), 'num');
+});
+$('i_win').addEventListener('change', () => setWindow(parseFloat($('i_win').value), null));
+
+function redraw(){
+  const tEnd = samples.length ? samples[samples.length-1].rt : 0;
+  drawChart(charts.hist, 0, Math.max(tEnd, 1));
+  drawChart(charts.live, Math.max(0, tEnd-winSeconds), Math.max(tEnd, winSeconds));
+  $('hd1').textContent = samples.length
+    ? samples.length+' samples · '+fmtTime(tEnd) : 'no data';
+  $('hd2').textContent = samples.length
+    ? (tEnd < winSeconds ? 'run shorter than window' : 'rolling') : 'no data';
+  updateLegend();
+}
+
+/* =====================================================================
+   Legend + readouts
+   ===================================================================== */
+function buildLegend(){
+  const el = $('legend'); el.innerHTML = '';
+  for (const s of SERIES) {
+    const d = document.createElement('div');
+    d.className = 'lg' + (s.on ? '' : ' off');
+    d.innerHTML = '<i style="background:'+s.color+'"></i><span>'+s.name+'</span>'+
+                  '<b>–</b><em>'+s.unit+'</em>';
+    d.onclick = () => { s.on = !s.on; d.classList.toggle('off', !s.on); dirty = true; };
+    d.ondblclick = () => { SERIES.forEach(x => x.on = (x === s)); syncLegend(); dirty = true; };
+    s._el = d; s._val = d.querySelector('b');
+    el.appendChild(d);
+  }
+}
+function syncLegend(){ SERIES.forEach(s => s._el.classList.toggle('off', !s.on)); }
+
+// Always the same number of decimals, and never wider than the reserved box.
+function fmtFixed(v, dec){
+  if (typeof v !== 'number' || !isFinite(v)) return '–';
+  let s = v.toFixed(dec);
+  if (s.length > 8) s = v.toPrecision(4);
+  return s;
+}
+
+function updateLegend(){
+  for (const s of SERIES) {
+    s._val.textContent = fmtFixed(last ? last[s.k] : undefined, s.d);
+    // The full-run range moved to the tooltip; on the chip it changed width
+    // constantly and dragged every neighbouring chip around with it.
+    const g = gRange[s.k];
+    s._el.title = s.name
+      + (g ? '\nfull-run range: '+fmtVal(g.mn)+' … '+fmtVal(g.mx)+(s.unit?' '+s.unit:'') : '')
+      + '\nclick to toggle · double-click to show this trace alone';
+  }
+}
+
+function buildReadouts(){
+  const el = $('readouts'); el.innerHTML = '';
+  for (const r of READOUTS) {
+    const d = document.createElement('div');
+    d.className = 'card';
+    d.innerHTML = '<div class="n">'+r.n+'</div><div class="v"><span>–</span><small>'+r.u+'</small></div>';
+    r._v = d.querySelector('.v span');
+    el.appendChild(d);
+  }
+  const d = document.createElement('div');
+  d.className = 'card';
+  d.innerHTML = '<div class="n">Mode</div><div class="v" id="roMode" style="font-size:15px">–</div>';
+  el.appendChild(d);
+}
+
+function updateReadouts(){
+  for (const r of READOUTS) {
+    const v = last[r.k];
+    r._v.textContent = (typeof v === 'number' && isFinite(v)) ? v.toFixed(r.d) : '–';
+  }
+  const m = last.md;
+  $('roMode').textContent = (m in MODE_NAMES) ? MODE_NAMES[m] : (m===undefined?'–':m);
+
+  $('statPkts').textContent = pktCount;
+  $('statErr').textContent = errCount;
+  const rs = rateStamps;
+  $('statRate').textContent = rs.length > 1
+    ? (1000*(rs.length-1)/(rs[rs.length-1]-rs[0])).toFixed(1) : '–';
+  $('statTime').textContent = samples.length ? fmtTime(samples[samples.length-1].rt) : '0:00';
+
+  const f = last.flg|0;
+  const fe = $('statFlags');
+  const names = FLAG_NAMES.filter(x => f & x[0]).map(x => x[1]);
+  fe.textContent = names.length ? '⚠ '+names.join(', ') : 'flags ok';
+  fe.style.color = names.length ? ((f & 0x04) ? 'var(--bad)' : 'var(--warn)') : 'var(--dim)';
+  fe.style.borderColor = names.length ? ((f & 0x04) ? 'var(--bad)' : 'var(--warn)') : 'var(--line)';
+  if (last.vok === 0 && !names.length) fe.textContent = 'VESC offline';
+  if (last.busy > 0) {                     // averaging a tare / scale calibration
+    fe.textContent = 'averaging… '+last.busy+' samples left';
+    fe.style.color = 'var(--accent)';
+    fe.style.borderColor = 'var(--accent)';
+  }
+}
+
+/* =====================================================================
+   Control bindings
+   ===================================================================== */
+for (const el of document.querySelectorAll('[data-key]')) {
+  el.addEventListener('input', () => {
+    el.classList.add('pending');
+    if (el.id === 'i_pump') { $('s_pump').value = el.value; updateFlow(); }
+  });
+  el.addEventListener('change', () => {
+    const v = el.value.trim();
+    if (v === '') return;
+    setParam(el.dataset.key, v);
+    if (el.id === 'i_pump') { $('s_pump').value = v; updateFlow(); }
+  });
+}
+$('s_pump').addEventListener('input', () => { $('i_pump').value = $('s_pump').value; updateFlow(); });
+$('s_pump').addEventListener('change', () => setParam('pump', $('s_pump').value));
+
+for (const b of document.querySelectorAll('.modebtn'))
+  b.onclick = () => { markMode(Number(b.dataset.mode)); setParam('mode', b.dataset.mode); };
+
+$('btnConnect').onclick = () => { port ? disconnect() : connect(); };
+$('btnStop').onclick    = () => { send('STOP'); };
+const tareN = () => Math.max(1, Math.min(500, parseInt($('i_taren').value,10) || 10));
+$('btnTare').onclick    = () => send('TARE n='+tareN());
+$('btnCal').onclick     = () => {
+  const w = parseFloat($('i_calw').value);
+  if (!isFinite(w) || w === 0) { alert('Enter the known mass in grams first.'); return; }
+  send('CAL w='+w+' n='+tareN());
+};
+$('btnZero').onclick    = () => send('ZERO n='+tareN());
+$('btnDiag').onclick    = () => send('ADCDIAG');
+$('btnSave').onclick    = () => send('SAVE');
+$('btnLoad').onclick    = () => send('LOAD');
+$('btnDef').onclick     = () => send('DEFAULTS');
+$('btnRaw').onclick     = () => { const v = $('i_raw').value.trim(); if (v) send(v); };
+$('i_raw').addEventListener('keydown', e => { if (e.key === 'Enter') $('btnRaw').click(); });
+
+$('btnClear').onclick = () => { if (samples.length && !confirm('Discard '+samples.length+' samples?')) return; clearRun(); };
+function clearRun(){ samples = []; gRange = {}; t0 = null; pktCount = 0; errCount = 0; dirty = true; }
+
+$('btnCsv').onclick = () => {
+  if (!samples.length) { alert('No data to export.'); return; }
+  const keys = [];
+  for (const s of samples) for (const k in s) if (!keys.includes(k)) keys.push(k);
+  const lines = [keys.join(',')];
+  for (const s of samples) lines.push(keys.map(k => (k in s ? s[k] : '')).join(','));
+  const blob = new Blob([lines.join('\n')], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'reactor_run_'+new Date().toISOString().replace(/[:.]/g,'-').slice(0,19)+'.csv';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+};
+
+for (const h of document.querySelectorAll('.sec>h2'))
+  h.onclick = () => h.parentElement.classList.toggle('collapsed');
+$('logHd').onclick = () => $('logwrap').classList.toggle('collapsed');
+
+window.addEventListener('resize', () => { dirty = true; });
+window.addEventListener('beforeunload', () => { if (port) disconnect(); });
+
+// Emergency stop also on Escape
+window.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && port) { send('STOP'); logLine('e','ESC → STOP'); }
+});
+
+/* =====================================================================
+   Render loop  (decoupled from the 9 Hz packet rate)
+   ===================================================================== */
+buildLegend();
+buildReadouts();
+updateFlow();
+redraw();
+
+function frame(){
+  if (dirty) { dirty = false; redraw(); updateReadouts(); }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+setInterval(() => { dirty = true; }, 250);   // keeps stats/clock fresh while idle
+</script>
+</body>
+</html>
