@@ -218,6 +218,10 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
           <input type="number" id="i_rpm" data-key="rpm" step="100" value="0"><span class="u">rpm</span>
         </div>
         <div class="row">
+          <label>Rim speed @ 85 mm</label>
+          <output id="o_speed" class="ro">0.00</output><span class="u">m/s</span>
+        </div>
+        <div class="row">
           <label for="i_pump">Water pump</label>
           <input type="number" id="i_pump" data-key="pump" step="25" min="0" max="1023" value="0"><span class="u"></span>
         </div>
@@ -232,7 +236,8 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
         delivers nothing below PWM 300 and plateaus at 14.3 ml/min from PWM 800 up, so the
         useful range is the 300–800 span; the slider still goes anywhere.</p>
         <p class="hint">Disc speed is mechanical RPM; the firmware multiplies by the pole-pair count
-        before sending to the VESC. 0 rpm releases the motor (coast).</p>
+        before sending to the VESC. 0 rpm releases the motor (coast). Rim speed converts the
+        commanded setpoint at an 85 mm radius — 1 m/s = 112.3 rpm.</p>
       </div>
     </div>
 
@@ -365,15 +370,19 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 /* =====================================================================
    Series / readout definitions
    ===================================================================== */
-// d = decimals used for the legend readout; fixing it per series keeps the
-// chips from resizing as values change.
+// d       = decimals in the legend readout; fixed per series so the chips never
+//           resize as values change.
+// minSpan = smallest y-axis span this metric may be drawn with, in its own
+//           units.  Without a floor, a trace that has been nearly static all
+//           run gets magnified until its own noise fills the panel.  Omit it
+//           and the series scales purely to its data, as before.
 const SERIES = [
-  {k:'ji',  name:'Junction current', unit:'A',   color:'#ff6b6b', on:true,  d:2},
-  {k:'jv',  name:'Junction voltage', unit:'V',   color:'#ffa94d', on:true,  d:3},
+  {k:'ji',  name:'Junction current', unit:'A',   color:'#ff6b6b', on:true,  d:2, minSpan:1.0},
+  {k:'jv',  name:'Junction voltage', unit:'V',   color:'#ffa94d', on:true,  d:3, minSpan:0.5},
   {k:'jw',  name:'Junction power',   unit:'W',   color:'#ffd43b', on:false, d:2},
-  {k:'f',   name:'Force',            unit:'g',   color:'#51cf66', on:true,  d:1},
+  {k:'f',   name:'Force',            unit:'g',   color:'#51cf66', on:true,  d:1, minSpan:50},
   {k:'fsp', name:'Force setpoint',   unit:'g',   color:'#20c997', on:false, d:1},
-  {k:'dmm', name:'Distance',         unit:'mm',  color:'#4dabf7', on:true,  d:2},
+  {k:'dmm', name:'Distance',         unit:'mm',  color:'#4dabf7', on:true,  d:2, minSpan:5},
   {k:'rpm', name:'Disc RPM',         unit:'rpm', color:'#748ffc', on:true,  d:0},
   {k:'mi',  name:'Motor current',    unit:'A',   color:'#b197fc', on:false, d:2},
   {k:'ii',  name:'Input current',    unit:'A',   color:'#e599f7', on:false, d:2},
@@ -433,6 +442,22 @@ function updateFlow(){
   el.title = stalled
     ? 'PWM '+Math.round(pwm)+' is below the pump’s 300 threshold — no flow'
     : (pwm >= PUMP_MAX_PWM ? 'Flow has plateaued; more PWM does not add flow' : '');
+}
+
+/* ---------------------------------------------------------------------
+   Disc rim speed.  The junction rides at an 85 mm radius, so surface speed
+   there is the physically meaningful number, not shaft rpm.
+   --------------------------------------------------------------------- */
+const DISC_RADIUS_M = 0.085;
+const RPM_TO_MPS = 2*Math.PI*DISC_RADIUS_M/60;      // 0.008901 m/s per rpm
+
+function updateDiscSpeed(){
+  const rpm = parseFloat($('i_rpm').value);
+  const el = $('o_speed');
+  const ok = isFinite(rpm);
+  el.textContent = ok ? (Math.abs(rpm)*RPM_TO_MPS).toFixed(2) : '–';
+  el.classList.toggle('off', !ok || rpm === 0);
+  el.title = ok ? Math.round(Math.abs(rpm))+' rpm × 2π × 85 mm / 60 s' : '';
 }
 
 const MODE_NAMES = ['Hold','Force PID','Reset','Manual'];
@@ -614,6 +639,7 @@ function onConfig(c){
     el.classList.remove('pending');
   }
   if ('pump' in c) { $('s_pump').value = c.pump; updateFlow(); }
+  if ('rpm' in c) updateDiscSpeed();
   if ('mode' in c) markMode(c.mode);
   if ('dirty' in c) {
     const d = c.dirty === 1;
@@ -758,8 +784,14 @@ function drawChart(ch, tMin, tMax){
     const r = ranges[j];
     if (!isFinite(r.mn)) continue;
     let lo = r.mn, hi2 = r.mx;
-    if (hi2 - lo < 1e-9) { lo -= 1; hi2 += 1; }
     const pad = (hi2-lo)*0.08; lo -= pad; hi2 += pad;
+    const minSpan = act[j].minSpan || 0;
+    if (hi2 - lo < minSpan) {             // hold the floor, centred on the data
+      const mid = (lo + hi2)/2;
+      lo = mid - minSpan/2; hi2 = mid + minSpan/2;
+    } else if (hi2 - lo < 1e-9) {         // dead flat with no floor declared
+      lo -= 1; hi2 += 1;
+    }
     r.lo = lo; r.hi = hi2;
     const Y = v => padT + ph - (v-lo)/(hi2-lo)*ph;
 
@@ -982,12 +1014,14 @@ for (const el of document.querySelectorAll('[data-key]')) {
   el.addEventListener('input', () => {
     el.classList.add('pending');
     if (el.id === 'i_pump') { $('s_pump').value = el.value; updateFlow(); }
+    if (el.id === 'i_rpm')  updateDiscSpeed();
   });
   el.addEventListener('change', () => {
     const v = el.value.trim();
     if (v === '') return;
     setParam(el.dataset.key, v);
     if (el.id === 'i_pump') { $('s_pump').value = v; updateFlow(); }
+    if (el.id === 'i_rpm')  updateDiscSpeed();
   });
 }
 $('s_pump').addEventListener('input', () => { $('i_pump').value = $('s_pump').value; updateFlow(); });
@@ -1048,6 +1082,7 @@ window.addEventListener('keydown', e => {
 buildLegend();
 buildReadouts();
 updateFlow();
+updateDiscSpeed();
 redraw();
 
 function frame(){

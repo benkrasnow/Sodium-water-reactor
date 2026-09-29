@@ -1,0 +1,1284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sodium-Water Reactor — Run Analysis</title>
+<style>
+:root{
+  --bg:#0e1117; --panel:#161b25; --panel2:#1c2230; --line:#2a3242;
+  --txt:#e6edf3; --dim:#8b97a8; --accent:#4dabf7; --good:#51cf66;
+  --warn:#ffd43b; --bad:#ff6b6b;
+  --mono:"Cascadia Mono",Consolas,"SF Mono",Menlo,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{
+  background:var(--bg); color:var(--txt);
+  font:13px/1.45 "Segoe UI",Roboto,system-ui,sans-serif;
+  display:flex; flex-direction:column; overflow:hidden;
+}
+
+/* ---------- header ---------- */
+header{
+  display:flex; align-items:center; gap:12px; padding:8px 14px;
+  background:var(--panel); border-bottom:1px solid var(--line); flex:0 0 auto;
+}
+header h1{font-size:14px;margin:0;font-weight:600;letter-spacing:.3px;white-space:nowrap}
+header h1 span{color:var(--dim);font-weight:400}
+.spacer{flex:1}
+button{
+  background:var(--panel2); color:var(--txt); border:1px solid var(--line);
+  border-radius:5px; padding:5px 11px; font:inherit; cursor:pointer;
+}
+button:hover:not(:disabled){border-color:var(--accent)}
+button:disabled{opacity:.4;cursor:default}
+button.primary{background:#12467a;border-color:#1c6fbf}
+button.sm{padding:3px 8px;font-size:12px}
+.pill{
+  font:11px var(--mono); padding:3px 8px; border-radius:10px;
+  background:var(--panel2); border:1px solid var(--line); color:var(--dim);
+  white-space:nowrap; max-width:240px; overflow:hidden; text-overflow:ellipsis;
+}
+.pill b{color:var(--txt);font-weight:600}
+
+/* ---------- layout ---------- */
+main{flex:1;display:flex;min-height:0}
+#side{
+  width:326px; flex:0 0 326px; background:var(--panel);
+  border-right:1px solid var(--line); overflow-y:auto; padding:10px;
+}
+#content{flex:1;display:flex;flex-direction:column;min-width:0;padding:10px;gap:10px;overflow:hidden}
+
+/* ---------- controls ---------- */
+.sec{border:1px solid var(--line);border-radius:6px;margin-bottom:9px;background:var(--panel2)}
+.sec>h2{
+  margin:0;font-size:11.5px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;
+  color:var(--dim); padding:7px 10px; cursor:pointer; user-select:none;
+  display:flex;align-items:center;gap:6px;
+}
+.sec>h2::before{content:"▾";font-size:9px;color:var(--dim)}
+.sec.collapsed>h2::before{content:"▸"}
+.sec.collapsed>.body{display:none}
+.sec>.body{padding:4px 10px 10px}
+.row{display:flex;align-items:center;gap:8px;margin:6px 0}
+.row label{flex:1;color:var(--dim);font-size:12px}
+.row .u{color:#5f6b7d;font-size:11px;width:30px;flex:0 0 30px}
+input[type=number],input[type=text],select{
+  width:92px;flex:0 0 92px; background:#0d1219; color:var(--txt);
+  border:1px solid var(--line); border-radius:4px; padding:4px 6px;
+  font:12px var(--mono); text-align:right;
+}
+select{text-align:left;width:124px;flex:0 0 124px}
+input:focus,select:focus{outline:none;border-color:var(--accent);background:#0a1a2a}
+input[type=range]{flex:1;accent-color:var(--accent);width:auto}
+input[type=checkbox]{width:auto;flex:0 0 auto;accent-color:var(--accent)}
+.ro{
+  width:92px;flex:0 0 92px; background:#0b0f16; color:var(--txt);
+  border:1px dashed var(--line); border-radius:4px; padding:4px 6px;
+  font:12px var(--mono); text-align:right;
+}
+.ro.off{color:#5f6b7d}
+.btnrow{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 2px}
+.btnrow button{flex:1;min-width:52px;padding:6px 4px;font-size:12px}
+.hint{color:#5f6b7d;font-size:11px;margin:6px 0 0;line-height:1.4}
+.warn{color:var(--warn);font-size:11px;margin:6px 0 0;line-height:1.4}
+
+/* ---------- channel picker ---------- */
+#chanlist{max-height:290px;overflow-y:auto;margin-top:6px;border:1px solid var(--line);border-radius:4px}
+.ch{
+  display:flex;align-items:center;gap:7px;padding:3px 7px;cursor:pointer;
+  border-bottom:1px solid #1b2230;font-size:12px;
+}
+.ch:last-child{border-bottom:none}
+.ch:hover{background:#202838}
+.ch i{width:9px;height:9px;border-radius:2px;flex:0 0 9px}
+.ch .nm{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ch .un{color:#5f6b7d;font-size:10.5px}
+#chanfilter{width:100%;flex:1;text-align:left}
+
+/* ---------- readouts ---------- */
+#readouts{
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(126px,1fr));
+  gap:7px; flex:0 0 auto;
+}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:6px 9px}
+.card .n{font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .v{font:600 19px/1.2 var(--mono);margin-top:1px;font-variant-numeric:tabular-nums}
+.card .v small{font-size:11px;color:var(--dim);font-weight:400;margin-left:3px}
+
+/* ---------- charts ---------- */
+.chart{
+  background:var(--panel); border:1px solid var(--line); border-radius:6px;
+  display:flex; flex-direction:column; min-height:0; position:relative;
+}
+#chDetail{flex:1}
+#chOver{flex:0 0 118px}
+.chart .hd{
+  display:flex;align-items:center;gap:10px;padding:5px 10px;border-bottom:1px solid var(--line);
+  font-size:11.5px;color:var(--dim);flex:0 0 auto;
+}
+.chart .hd b{color:var(--txt);font-weight:600;font-size:12px}
+.cwrap{flex:1;position:relative;min-height:70px}
+canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#cvDetail{cursor:crosshair}
+#cvOver{cursor:ew-resize}
+.tip{
+  position:absolute;pointer-events:none;background:#0b0f16ee;border:1px solid var(--line);
+  border-radius:5px;padding:6px 8px;font:11px var(--mono);white-space:nowrap;z-index:5;
+  display:none;box-shadow:0 4px 14px #0008;
+}
+.tip .r{display:flex;gap:10px;justify-content:space-between}
+.tip .r i{width:7px;height:7px;border-radius:2px;display:inline-block;margin-right:5px}
+.tip .t{color:var(--dim);border-bottom:1px solid var(--line);margin-bottom:3px;padding-bottom:3px}
+#legend{display:flex;flex-wrap:wrap;gap:5px;flex:0 0 auto}
+.lg{
+  display:flex;align-items:center;gap:5px;padding:3px 8px;border-radius:12px;
+  background:var(--panel);border:1px solid var(--line);cursor:pointer;font-size:11.5px;
+  user-select:none;
+}
+.lg i{width:9px;height:9px;border-radius:2px;flex:0 0 9px}
+.lg b{
+  font:600 11.5px var(--mono); font-variant-numeric:tabular-nums;
+  flex:0 0 7.5ch; width:7.5ch; text-align:right; overflow:hidden;
+}
+.lg em{font-style:normal;color:var(--dim);font-size:10.5px;flex:0 0 auto}
+
+/* ---------- stats ---------- */
+#statwrap{flex:0 0 auto;background:var(--panel);border:1px solid var(--line);border-radius:6px}
+#statwrap .hd{display:flex;align-items:center;gap:10px;padding:5px 10px;font-size:11.5px;color:var(--dim);cursor:pointer}
+#statwrap .hd b{color:var(--txt)}
+#stats{max-height:168px;overflow:auto;border-top:1px solid var(--line)}
+#statwrap.collapsed #stats{display:none}
+table{border-collapse:collapse;width:100%;font:11px var(--mono);font-variant-numeric:tabular-nums}
+th,td{padding:3px 9px;text-align:right;white-space:nowrap}
+th{color:var(--dim);font-weight:600;position:sticky;top:0;background:var(--panel);border-bottom:1px solid var(--line)}
+td:first-child,th:first-child{text-align:left;font-family:"Segoe UI",Roboto,sans-serif}
+tbody tr:hover{background:#1c2432}
+td i{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:6px}
+
+/* ---------- empty / drop ---------- */
+#empty{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:14px;color:var(--dim);text-align:center;
+}
+#empty .big{font-size:15px;color:var(--txt)}
+#drop{
+  position:fixed;inset:0;background:#0e1117e0;border:3px dashed var(--accent);
+  display:none;align-items:center;justify-content:center;font-size:18px;color:var(--accent);z-index:99;
+}
+#drop.on{display:flex}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Run Analysis <span>· sodium-water reactor</span></h1>
+  <button id="btnLoad" class="primary">Load CSV…</button>
+  <input type="file" id="file" accept=".csv,.txt" style="display:none">
+  <span class="pill" id="pFile">no file</span>
+  <span class="pill">rows <b id="pRows">–</b></span>
+  <span class="pill">span <b id="pSpan">–</b></span>
+  <span class="pill">view <b id="pView">–</b></span>
+  <div class="spacer"></div>
+  <button id="btnExport" class="sm" disabled>Export window CSV</button>
+  <button id="btnPng" class="sm" disabled>Save chart PNG</button>
+</header>
+
+<main>
+  <!-- ================= controls ================= -->
+  <div id="side">
+
+    <div class="sec" id="secView">
+      <h2>View window</h2>
+      <div class="body">
+        <div class="row">
+          <label for="i_a">Start</label>
+          <input type="number" id="i_a" step="0.1" value="0"><span class="u">s</span>
+        </div>
+        <div class="row">
+          <label for="i_b">End</label>
+          <input type="number" id="i_b" step="0.1" value="0"><span class="u">s</span>
+        </div>
+        <div class="row">
+          <label>Duration</label>
+          <output id="o_dur" class="ro">–</output><span class="u">s</span>
+        </div>
+        <div class="row"><input type="range" id="s_pan" min="0" max="1000" step="1" value="0"></div>
+        <div class="btnrow">
+          <button id="btnZoomIn">Zoom in</button>
+          <button id="btnZoomOut">Zoom out</button>
+          <button id="btnFit">Fit all</button>
+        </div>
+        <p class="hint">Drag on the overview to select a range, or drag inside the selection to
+        scroll it; its edges resize. On the main chart the wheel zooms about the pointer and
+        dragging pans. Arrow keys scroll, shift+arrow scrolls a whole window,
+        <b>+</b>/<b>−</b> zoom, Home fits everything.</p>
+      </div>
+    </div>
+
+    <div class="sec" id="secSmooth">
+      <h2>Smoothing</h2>
+      <div class="body">
+        <div class="row">
+          <label for="i_sm">Method</label>
+          <select id="i_sm">
+            <option value="none">None (raw)</option>
+            <option value="ma">Moving average</option>
+            <option value="med">Median</option>
+            <option value="ema">Exponential (EMA)</option>
+          </select>
+        </div>
+        <div class="row" id="rowWin" style="display:none">
+          <label for="i_win">Window</label>
+          <input type="number" id="i_win" min="1" max="501" step="2" value="9"><span class="u">smp</span>
+        </div>
+        <div class="row" id="rowAlpha" style="display:none">
+          <label for="i_alpha">Alpha</label>
+          <input type="number" id="i_alpha" min="0.01" max="1" step="0.05" value="0.3"><span class="u"></span>
+        </div>
+        <div class="row">
+          <label>Time constant</label>
+          <output id="o_smt" class="ro off">–</output><span class="u">s</span>
+        </div>
+        <div class="row">
+          <label for="c_ghost">Show raw behind</label>
+          <input type="checkbox" id="c_ghost" checked><span class="u"></span>
+        </div>
+        <p class="hint">Moving average and median are centred, so they add no lag. EMA is
+        one-sided and does lag — it matches the filter the firmware applies to the load cell.
+        Median is the one to reach for when single-sample spikes are the problem.</p>
+      </div>
+    </div>
+
+    <div class="sec" id="secY">
+      <h2>Y axis</h2>
+      <div class="body">
+        <div class="row">
+          <label for="i_ymode">Scale from</label>
+          <select id="i_ymode">
+            <option value="full">Whole file</option>
+            <option value="window">Visible window</option>
+          </select>
+        </div>
+        <div class="row">
+          <label for="c_floor">Minimum spans</label>
+          <input type="checkbox" id="c_floor" checked><span class="u"></span>
+        </div>
+        <div class="row">
+          <label for="i_ych">Override</label>
+          <select id="i_ych"></select>
+        </div>
+        <div class="row">
+          <label for="i_ymin">Min</label>
+          <input type="number" id="i_ymin" step="any" placeholder="auto"><span class="u"></span>
+        </div>
+        <div class="row">
+          <label for="i_ymax">Max</label>
+          <input type="number" id="i_ymax" step="any" placeholder="auto"><span class="u"></span>
+        </div>
+        <div class="btnrow"><button id="btnYAuto">Clear override</button></div>
+        <p class="hint">Scaling from the whole file keeps the window comparable to the overview.
+        Minimum spans stop a near-static trace being magnified into noise — 1 A, 0.5 V, 50 g,
+        5 mm, as in the console.</p>
+      </div>
+    </div>
+
+    <div class="sec" id="secChan">
+      <h2>Channels</h2>
+      <div class="body">
+        <div class="row"><input type="text" id="chanfilter" placeholder="filter…"></div>
+        <div class="btnrow">
+          <button id="btnAll">All</button>
+          <button id="btnNone">None</button>
+          <button id="btnDefault">Default</button>
+        </div>
+        <div id="chanlist"></div>
+        <p class="hint" id="chanHint">Load a file to list its columns.</p>
+      </div>
+    </div>
+
+    <div class="sec collapsed" id="secFile">
+      <h2>File</h2>
+      <div class="body">
+        <div class="row">
+          <label for="i_tcol">Time column</label>
+          <select id="i_tcol"></select>
+        </div>
+        <p class="hint" id="fileInfo">No file loaded.</p>
+        <p class="warn" id="fileWarn" style="display:none"></p>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ================= data ================= -->
+  <div id="content">
+
+    <div id="empty">
+      <div class="big">Load a run CSV to begin</div>
+      <div>Drop a file anywhere on this page, or use <b>Load CSV…</b></div>
+      <div style="font-size:11.5px">Reads the files exported by the reactor console, and any
+      other CSV that has a numeric time column.</div>
+    </div>
+
+    <div id="work" style="display:none;flex:1;flex-direction:column;gap:10px;min-height:0">
+      <div id="readouts"></div>
+      <div id="legend"></div>
+
+      <div class="chart" id="chDetail">
+        <div class="hd"><b>Window</b><span id="hdDetail">–</span></div>
+        <div class="cwrap"><canvas id="cvDetail"></canvas><div class="tip" id="tipDetail"></div></div>
+      </div>
+
+      <div class="chart" id="chOver">
+        <div class="hd"><b>Whole run</b><span id="hdOver">–</span>
+          <span class="spacer"></span>
+          <span style="color:#5f6b7d">drag to select · double-click to fit</span></div>
+        <div class="cwrap"><canvas id="cvOver"></canvas></div>
+      </div>
+
+      <div id="statwrap">
+        <div class="hd" id="statHd">
+          <b>Statistics over window</b>
+          <div class="spacer"></div>
+          <span style="color:#5f6b7d">click to collapse</span>
+        </div>
+        <div id="stats"></div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<div id="drop">Drop run CSV to load</div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+
+/* =====================================================================
+   Column metadata.  Columns the reactor console exports get a proper
+   name, unit, colour and axis floor; anything else still plots, taking a
+   palette colour and its raw header as the name.
+   ===================================================================== */
+const META = {
+  ji  :{name:'Junction current', unit:'A',   color:'#ff6b6b', d:2, minSpan:1.0, on:1},
+  jv  :{name:'Junction voltage', unit:'V',   color:'#ffa94d', d:3, minSpan:0.5, on:1},
+  jw  :{name:'Junction power',   unit:'W',   color:'#ffd43b', d:2, minSpan:0.5},
+  f   :{name:'Force',            unit:'g',   color:'#51cf66', d:1, minSpan:50,  on:1},
+  fsp :{name:'Force setpoint',   unit:'g',   color:'#20c997', d:1},
+  perr:{name:'Force error',      unit:'g',   color:'#63e6be', d:1, minSpan:50},
+  fr  :{name:'Force raw',        unit:'cts', color:'#96f2d7', d:0},
+  dmm :{name:'Distance',         unit:'mm',  color:'#4dabf7', d:2, minSpan:5,   on:1},
+  d   :{name:'Distance sensor',  unit:'V',   color:'#74c0fc', d:4},
+  rpm :{name:'Disc RPM',         unit:'rpm', color:'#748ffc', d:0, on:1},
+  erpm:{name:'Disc eRPM',        unit:'rpm', color:'#5c7cfa', d:0},
+  rsp :{name:'RPM setpoint',     unit:'rpm', color:'#9775fa', d:0},
+  mi  :{name:'Motor current',    unit:'A',   color:'#b197fc', d:2},
+  ii  :{name:'Input current',    unit:'A',   color:'#e599f7', d:2},
+  iv  :{name:'Input voltage',    unit:'V',   color:'#f783ac', d:2},
+  lp  :{name:'Linear PWM',       unit:'',    color:'#ff922b', d:0},
+  pmp :{name:'Pump PWM',         unit:'',    color:'#38d9a9', d:0},
+  md  :{name:'Mode',             unit:'',    color:'#adb5bd', d:0},
+  flg :{name:'Status flags',     unit:'',    color:'#868e96', d:0},
+  vok :{name:'VESC ok',          unit:'',    color:'#7f8c9e', d:0},
+  busy:{name:'Cal samples left', unit:'',    color:'#7048e8', d:0},
+  jir :{name:'Current raw',      unit:'cts', color:'#c92a2a', d:0},
+  jvr :{name:'Voltage raw',      unit:'cts', color:'#e8590c', d:0},
+  dr  :{name:'Distance raw',     unit:'cts', color:'#1971c2', d:0},
+  n   :{name:'Packet number',    unit:'',    color:'#566173', d:0},
+  t   :{name:'Teensy time',      unit:'ms',  color:'#566173', d:0},
+  rt  :{name:'Run time',         unit:'s',   color:'#566173', d:2},
+  flow:{name:'Water flow',       unit:'ml/min', color:'#22b8cf', d:2, minSpan:2},
+  vrim:{name:'Rim speed @85mm',  unit:'m/s',    color:'#4c6ef5', d:2, minSpan:1}
+};
+const PALETTE = ['#ff8787','#ffc078','#ffe066','#8ce99a','#66d9e8','#91a7ff','#e599f7',
+                 '#f783ac','#a9e34b','#ffa8a8','#99e9f2','#d0bfff'];
+
+/* Same conversions the live console uses, so derived channels agree with it. */
+const PUMP_FLOW_TABLE = [[300,8.0],[400,10.7],[500,11.7],[600,12.7],[700,13.0],[800,14.3]];
+function pumpFlow(pwm){
+  if (!isFinite(pwm) || pwm < 300) return 0;
+  if (pwm >= 800) return 14.3;
+  for (let i=0;i<PUMP_FLOW_TABLE.length-1;i++){
+    const a=PUMP_FLOW_TABLE[i], b=PUMP_FLOW_TABLE[i+1];
+    if (pwm <= b[0]) return a[1] + (b[1]-a[1])*(pwm-a[0])/(b[0]-a[0]);
+  }
+  return 14.3;
+}
+const RPM_TO_MPS = 2*Math.PI*0.085/60;
+
+/* =====================================================================
+   State
+   ===================================================================== */
+let CH = [];            // channels
+let T = null;           // Float64Array, seconds from run start
+let N = 0;
+let full = {a:0, b:1};  // whole-file extent
+let view = {a:0, b:1};  // visible window
+let hoverX = null;      // device px inside the detail canvas
+let cursorIdx = -1;
+let dirty = true;
+let _dt = 0;
+
+const smooth = {mode:'none', win:9, alpha:0.3, ghost:true};
+const yconf  = {mode:'full', floors:true};
+
+/* =====================================================================
+   CSV parsing
+   ===================================================================== */
+function parseCSV(text){
+  const rows=[]; let row=[], field='', q=false, i=0;
+  if (text.charCodeAt(0) === 0xFEFF) i = 1;                 // strip BOM
+  for (; i<text.length; i++){
+    const c = text[i];
+    if (q){
+      if (c === '"'){ if (text[i+1] === '"'){ field+='"'; i++; } else q=false; }
+      else field += c;
+    }
+    else if (c === '"') q = true;
+    else if (c === ','){ row.push(field); field=''; }
+    else if (c === '\n'){ row.push(field); field=''; rows.push(row); row=[]; }
+    else if (c !== '\r') field += c;
+  }
+  if (field.length || row.length){ row.push(field); rows.push(row); }
+  return rows.filter(r => r.length>1 || (r.length===1 && r[0].trim()!==''));
+}
+
+function loadText(text, name){
+  const rows = parseCSV(text);
+  if (rows.length < 2){ alert('That file has no data rows.'); return; }
+  const cols = rows[0].map(s => s.trim());
+  const nRows = rows.length - 1;
+
+  const raw = {};
+  for (const c of cols) raw[c] = new Float64Array(nRows);
+  for (let r=0; r<nRows; r++){
+    const line = rows[r+1];
+    for (let c=0; c<cols.length; c++){
+      const s = line[c];
+      raw[cols[c]][r] = (s===undefined || s==='') ? NaN : Number(s);
+    }
+  }
+
+  const numeric = cols.filter(c => {
+    let ok=0;
+    for (let r=0; r<nRows && ok<3; r++) if (isFinite(raw[c][r])) ok++;
+    return ok >= 2;
+  });
+  if (!numeric.length){ alert('No numeric columns found in that file.'); return; }
+
+  const tsel = $('i_tcol');
+  tsel.innerHTML = numeric.map(c => '<option value="'+c+'">'+c+'</option>').join('')
+                 + '<option value="__idx">(sample index)</option>';
+  const tcol = numeric.indexOf('rt')>=0 ? 'rt' : (numeric.indexOf('t')>=0 ? 't' : numeric[0]);
+  tsel.value = tcol;
+
+  window.__csv = {cols, numeric, raw, nRows, name};
+  _dt = 0;
+  buildFrom(tcol);
+
+  $('pFile').textContent = name;
+  $('pFile').title = name;
+  $('btnExport').disabled = false;
+  $('btnPng').disabled = false;
+  $('empty').style.display = 'none';
+  $('work').style.display = 'flex';
+}
+
+function buildFrom(tcol){
+  const csv = window.__csv;
+  if (!csv) return;
+  const {cols, numeric, raw, nRows, name} = csv;
+  _dt = 0;
+
+  // ---- time base ----
+  const t = new Float64Array(nRows);
+  if (tcol === '__idx'){ for (let r=0;r<nRows;r++) t[r]=r; }
+  else {
+    const src = raw[tcol];
+    const scale = (tcol === 't') ? 0.001 : 1;        // Teensy millis -> seconds
+    for (let r=0;r<nRows;r++) t[r] = src[r]*scale;
+  }
+
+  let order = [];
+  for (let r=0;r<nRows;r++) if (isFinite(t[r])) order.push(r);
+
+  let warn = '';
+  let mono = true;
+  for (let i=1;i<order.length;i++) if (t[order[i]] < t[order[i-1]]){ mono=false; break; }
+  if (!mono){
+    order.sort((a,b)=>t[a]-t[b]);
+    warn = 'The time column is not increasing, so rows were sorted by time. If this run spans '+
+           'a Teensy reset the two segments are now interleaved — split the file first.';
+  }
+  if (order.length < nRows && !warn)
+    warn = (nRows-order.length)+' row(s) had no time value and were dropped.';
+
+  N = order.length;
+  T = new Float64Array(N);
+  const t0 = N ? t[order[0]] : 0;
+  for (let i=0;i<N;i++) T[i] = t[order[i]] - t0;
+
+  // ---- channels (keep prior on/override state across a time-column change) ----
+  const prev = {};
+  CH.forEach(c => prev[c.k] = {on:c.on, ymin:c.ymin, ymax:c.ymax});
+  CH = [];
+  let pi = 0;
+  const mk = (k, arr) => {
+    const m = META[k] || {};
+    CH.push({
+      k:k, name:m.name||k, unit:m.unit!==undefined?m.unit:'',
+      color:m.color||PALETTE[pi++ % PALETTE.length],
+      d:m.d!==undefined?m.d:3, minSpan:m.minSpan||0,
+      on: prev[k] ? prev[k].on : !!m.on,
+      ymin: prev[k] ? prev[k].ymin : null,
+      ymax: prev[k] ? prev[k].ymax : null,
+      raw:arr, sm:arr, fullR:null, _val:null, _card:null
+    });
+  };
+  for (const k of numeric){
+    if (k === tcol) continue;
+    const src = raw[k], a = new Float64Array(N);
+    for (let i=0;i<N;i++) a[i] = src[order[i]];
+    mk(k, a);
+  }
+
+  // ---- derived channels, using the console's own conversions ----
+  const by = {}; CH.forEach(c => by[c.k]=c);
+  if (by.pmp){
+    const a = new Float64Array(N);
+    for (let i=0;i<N;i++) a[i] = pumpFlow(by.pmp.raw[i]);
+    mk('flow', a);
+  }
+  if (by.rpm){
+    const a = new Float64Array(N);
+    for (let i=0;i<N;i++) a[i] = Math.abs(by.rpm.raw[i])*RPM_TO_MPS;
+    mk('vrim', a);
+  }
+
+  full = {a:0, b: N>1 ? Math.max(T[N-1], 1e-3) : 1};
+  view = {a:full.a, b:full.b};
+
+  $('pRows').textContent = N.toLocaleString();
+  $('pSpan').textContent = fmtTime(full.b);
+  $('fileInfo').textContent = name+' — '+N.toLocaleString()+' rows, '+cols.length+
+        ' columns, time from "'+tcol+'".';
+  $('fileWarn').style.display = warn ? 'block' : 'none';
+  $('fileWarn').textContent = warn;
+  if (warn) $('secFile').classList.remove('collapsed');
+
+  applySmoothing();
+  buildChannelList();
+  buildYSelect();
+  buildReadouts();
+  buildLegend();
+  syncView(null);
+}
+
+/* =====================================================================
+   Smoothing
+   ===================================================================== */
+function movAvg(y, w){                       // centred, zero phase
+  const n=y.length, out=new Float64Array(n);
+  if (w<=1){ out.set(y); return out; }
+  const ps=new Float64Array(n+1), pc=new Float64Array(n+1);
+  for (let i=0;i<n;i++){
+    const v=y[i], ok=isFinite(v);
+    ps[i+1]=ps[i]+(ok?v:0);
+    pc[i+1]=pc[i]+(ok?1:0);
+  }
+  const half=w>>1;
+  for (let i=0;i<n;i++){
+    const a=Math.max(0,i-half), b=Math.min(n-1,i+half);
+    const cnt=pc[b+1]-pc[a];
+    out[i] = cnt>0 ? (ps[b+1]-ps[a])/cnt : NaN;
+  }
+  return out;
+}
+function medFilt(y, w){                      // centred, kills isolated spikes
+  const n=y.length, out=new Float64Array(n);
+  if (w<=1){ out.set(y); return out; }
+  const half=w>>1, buf=[];
+  for (let i=0;i<n;i++){
+    buf.length=0;
+    const a=Math.max(0,i-half), b=Math.min(n-1,i+half);
+    for (let j=a;j<=b;j++){ const v=y[j]; if (isFinite(v)) buf.push(v); }
+    if (!buf.length){ out[i]=NaN; continue; }
+    buf.sort((p,q)=>p-q);
+    const m=buf.length>>1;
+    out[i] = (buf.length & 1) ? buf[m] : (buf[m-1]+buf[m])/2;
+  }
+  return out;
+}
+function emaFilt(y, alpha){                  // one sided, same shape as the firmware filter
+  const n=y.length, out=new Float64Array(n);
+  let s=NaN;
+  for (let i=0;i<n;i++){
+    const v=y[i];
+    if (!isFinite(v)){ out[i]=s; continue; }
+    s = isFinite(s) ? s + alpha*(v-s) : v;
+    out[i]=s;
+  }
+  return out;
+}
+
+function applySmoothing(){
+  const w = Math.max(1, Math.min(501, smooth.win|0));
+  for (const c of CH){
+    c.sm = smooth.mode==='none' ? c.raw
+         : smooth.mode==='ma'   ? movAvg(c.raw, w)
+         : smooth.mode==='med'  ? medFilt(c.raw, w)
+         :                        emaFilt(c.raw, smooth.alpha);
+  }
+  for (const c of CH) c.fullR = rangeOf(c, 0, N);
+  updateSmoothInfo();
+  dirty = true;
+}
+
+function updateSmoothInfo(){
+  const dt = medianDt();
+  let txt = '–';
+  if (smooth.mode==='ma' || smooth.mode==='med') txt = (smooth.win*dt).toFixed(2);
+  else if (smooth.mode==='ema' && smooth.alpha>0) txt = (dt/smooth.alpha).toFixed(2);
+  $('o_smt').textContent = txt;
+  $('o_smt').classList.toggle('off', txt==='–');
+  $('rowWin').style.display   = (smooth.mode==='ma'||smooth.mode==='med') ? 'flex' : 'none';
+  $('rowAlpha').style.display = (smooth.mode==='ema') ? 'flex' : 'none';
+}
+
+function medianDt(){
+  if (_dt) return _dt;
+  if (N < 3) return (_dt = 0.11);
+  const s=[], step=Math.max(1, Math.floor(N/200));
+  for (let i=step;i<N;i+=step) s.push((T[i]-T[i-step])/step);
+  s.sort((a,b)=>a-b);
+  _dt = s[s.length>>1] || 0.11;
+  return _dt;
+}
+
+/* =====================================================================
+   Ranges
+   ===================================================================== */
+function rangeOf(c, i0, i1){
+  const ghost = (smooth.mode!=='none' && smooth.ghost);
+  let mn=Infinity, mx=-Infinity;
+  for (let i=i0;i<i1;i++){
+    let v=c.sm[i];
+    if (isFinite(v)){ if (v<mn) mn=v; if (v>mx) mx=v; }
+    if (ghost){ v=c.raw[i]; if (isFinite(v)){ if (v<mn) mn=v; if (v>mx) mx=v; } }
+  }
+  return {mn:mn, mx:mx};
+}
+
+// Final drawn axis for a channel: mode, floors, then any manual override.
+function axisOf(c, i0, i1){
+  const r = (yconf.mode==='window') ? rangeOf(c, i0, i1) : c.fullR;
+  if (!r || !isFinite(r.mn)) return null;
+  let lo=r.mn, hi=r.mx;
+  const pad=(hi-lo)*0.08; lo-=pad; hi+=pad;
+  const ms = yconf.floors ? (c.minSpan||0) : 0;
+  if (hi-lo < ms){ const mid=(lo+hi)/2; lo=mid-ms/2; hi=mid+ms/2; }
+  else if (hi-lo < 1e-9){ lo-=1; hi+=1; }
+  if (c.ymin!==null && isFinite(c.ymin)) lo=c.ymin;
+  if (c.ymax!==null && isFinite(c.ymax)) hi=c.ymax;
+  if (hi<=lo) hi = lo + 1;
+  return {lo:lo, hi:hi};
+}
+
+/* =====================================================================
+   Helpers
+   ===================================================================== */
+function fitCanvas(cv){
+  const r = cv.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const w = Math.max(1, Math.round(r.width*dpr)), h = Math.max(1, Math.round(r.height*dpr));
+  if (cv.width!==w || cv.height!==h){ cv.width=w; cv.height=h; }
+  return dpr;
+}
+function tickStep(span, target){
+  if (span <= 0) return 1;
+  const raw = span/target;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const n = raw/mag;
+  return (n<=1?1:n<=2?2:n<=5?5:10)*mag;
+}
+function fmtTime(s){
+  if (!isFinite(s)) return '–';
+  if (s < 60) return (s<10 ? s.toFixed(2) : s.toFixed(1))+'s';
+  const m = Math.floor(s/60);
+  return m+':'+String(Math.floor(s%60)).padStart(2,'0');
+}
+function fmtVal(v){
+  if (typeof v!=='number' || !isFinite(v)) return '–';
+  const a=Math.abs(v);
+  if (a===0) return '0';
+  if (a>=1000) return v.toFixed(0);
+  if (a>=10) return v.toFixed(1);
+  if (a>=1) return v.toFixed(2);
+  return v.toPrecision(3);
+}
+function fmtFixed(v, dec){
+  if (typeof v!=='number' || !isFinite(v)) return '–';
+  let s=v.toFixed(dec);
+  if (s.length>8) s=v.toPrecision(4);
+  return s;
+}
+function lowerBound(t){
+  let lo=0, hi=N;
+  while (lo<hi){ const m=(lo+hi)>>1; if (T[m]<t) lo=m+1; else hi=m; }
+  return lo;
+}
+function activeCh(){ return CH.filter(c=>c.on); }
+
+/* =====================================================================
+   Chart rendering
+   ===================================================================== */
+const detail = {cv:$('cvDetail'), tip:$('tipDetail'), geom:null};
+const over   = {cv:$('cvOver'),   tip:null,           geom:null};
+
+// Bucket the samples in [tMin,tMax] into one entry per pixel column.
+function bucket(act, tMin, tMax, cols, useRaw){
+  const out = act.map(function(){ return new Array(cols).fill(null); });
+  const span = tMax-tMin;
+  const start = Math.max(0, lowerBound(tMin)-1);
+  for (let i=start;i<N;i++){
+    const tt=T[i];
+    if (tt < tMin) continue;
+    if (tt > tMax) break;
+    let cix = Math.floor((tt-tMin)/span*(cols-1));
+    if (cix<0) cix=0; else if (cix>=cols) cix=cols-1;
+    for (let j=0;j<act.length;j++){
+      const v = (useRaw ? act[j].raw : act[j].sm)[i];
+      if (!isFinite(v)) continue;
+      const b = out[j][cix];
+      if (b){ if (v<b.mn) b.mn=v; if (v>b.mx) b.mx=v; b.sum+=v; b.n++; }
+      else out[j][cix] = {mn:v, mx:v, sum:v, n:1};
+    }
+  }
+  return out;
+}
+
+function drawTraces(ctx, act, axes, buckets, geom, alpha, thin){
+  const padL=geom.padL, padT=geom.padT, pw=geom.pw, ph=geom.ph, dpr=geom.dpr;
+  const cols = buckets[0] ? buckets[0].length : 0;
+  const colX = c => padL + (cols>1 ? c/(cols-1) : 0)*pw;
+  for (let j=0;j<act.length;j++){
+    const ax = axes[j];
+    if (!ax) continue;
+    const Y = v => padT + ph - (v-ax.lo)/(ax.hi-ax.lo)*ph;
+    const pts=[];
+    for (let c=0;c<cols;c++) if (buckets[j][c]) pts.push([c, buckets[j][c]]);
+    if (!pts.length) continue;
+    if (pts.length>3){
+      ctx.fillStyle = act[j].color + (alpha<1 ? '18' : '2e');
+      ctx.beginPath();
+      ctx.moveTo(colX(pts[0][0]), Y(pts[0][1].mx));
+      for (let p=1;p<pts.length;p++) ctx.lineTo(colX(pts[p][0]), Y(pts[p][1].mx));
+      for (let p=pts.length-1;p>=0;p--) ctx.lineTo(colX(pts[p][0]), Y(pts[p][1].mn));
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = act[j].color;
+    ctx.lineWidth = (thin?1:1.5)*dpr;
+    ctx.lineJoin='round';
+    ctx.beginPath();
+    for (let p=0;p<pts.length;p++){
+      const x=colX(pts[p][0]), y=Y(pts[p][1].sum/pts[p][1].n);
+      if (p===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+}
+
+function paint(ch, tMin, tMax, isOver){
+  const cv=ch.cv, ctx=cv.getContext('2d');
+  const dpr=fitCanvas(cv);
+  const W=cv.width, H=cv.height;
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.clearRect(0,0,W,H);
+
+  const act = activeCh();
+  const single = act.length===1;
+  const padL = Math.round(((single && !isOver) ? 58 : 10)*dpr);
+  const padR = Math.round(10*dpr);
+  const padT = Math.round(8*dpr), padB = Math.round(18*dpr);
+  const pw = W-padL-padR, ph = H-padT-padB;
+  ch.geom = {padL:padL, padT:padT, pw:pw, ph:ph, tMin:tMin, tMax:tMax, dpr:dpr};
+  if (pw<=4 || ph<=4) return;
+
+  ctx.strokeStyle='#2a3242'; ctx.lineWidth=1*dpr;
+  ctx.strokeRect(padL+0.5, padT+0.5, pw, ph);
+
+  if (!N || tMax<=tMin){
+    ctx.fillStyle='#5f6b7d'; ctx.font=(12*dpr)+'px sans-serif'; ctx.textAlign='center';
+    ctx.fillText('no data', padL+pw/2, padT+ph/2);
+    return;
+  }
+
+  // ---- time grid ----
+  const span=tMax-tMin;
+  const ts=tickStep(span, Math.max(2, Math.floor(pw/(90*dpr))));
+  ctx.font=(10*dpr)+'px monospace'; ctx.textAlign='center'; ctx.textBaseline='top';
+  for (let t=Math.ceil(tMin/ts)*ts; t<=tMax; t+=ts){
+    const x=padL+(t-tMin)/span*pw;
+    ctx.strokeStyle='#222a38';
+    ctx.beginPath(); ctx.moveTo(x+0.5,padT); ctx.lineTo(x+0.5,padT+ph); ctx.stroke();
+    ctx.fillStyle='#5f6b7d'; ctx.fillText(fmtTime(t), x, padT+ph+3*dpr);
+  }
+
+  const i0=lowerBound(tMin), i1=lowerBound(tMax);
+  const axes = act.map(c => axisOf(c, i0, Math.max(i1, i0+1)));
+  const cols = Math.max(2, Math.floor(pw/dpr));
+
+  if (smooth.mode!=='none' && smooth.ghost)
+    drawTraces(ctx, act, axes, bucket(act,tMin,tMax,cols,true), ch.geom, 0.30, true);
+  drawTraces(ctx, act, axes, bucket(act,tMin,tMax,cols,false), ch.geom, 1, false);
+
+  // ---- value axis, only when a single channel is shown ----
+  if (single && !isOver && axes[0]){
+    const lo=axes[0].lo, hi=axes[0].hi;
+    const vs=tickStep(hi-lo, Math.max(2, Math.floor(ph/(34*dpr))));
+    ctx.textAlign='right'; ctx.textBaseline='middle'; ctx.font=(10*dpr)+'px monospace';
+    for (let v=Math.ceil(lo/vs)*vs; v<=hi; v+=vs){
+      const y=padT+ph-(v-lo)/(hi-lo)*ph;
+      ctx.strokeStyle='#222a38';
+      ctx.beginPath(); ctx.moveTo(padL,y+0.5); ctx.lineTo(padL+pw,y+0.5); ctx.stroke();
+      ctx.fillStyle='#5f6b7d'; ctx.fillText(fmtVal(v), padL-5*dpr, y);
+    }
+  } else if (!isOver && act.length>1){
+    ctx.fillStyle='#454f60'; ctx.font=(10*dpr)+'px sans-serif';
+    ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillText('each trace on its own scale — show one channel for a labelled axis',
+                 padL+5*dpr, padT+4*dpr);
+  }
+
+  // ---- selection overlay on the overview ----
+  if (isOver){
+    const X = t => padL + (t-tMin)/span*pw;
+    const xa=X(view.a), xb=X(view.b);
+    ctx.fillStyle='#0e1117aa';
+    ctx.fillRect(padL, padT, Math.max(0,xa-padL), ph);
+    ctx.fillRect(xb, padT, Math.max(0,padL+pw-xb), ph);
+    ctx.strokeStyle = dragOver ? '#74c0fc' : '#4dabf7';
+    ctx.lineWidth=1.5*dpr;
+    ctx.strokeRect(xa+0.5, padT+0.5, Math.max(1,xb-xa), ph);
+    ctx.fillStyle='#4dabf7';
+    ctx.fillRect(xa-1.5*dpr, padT, 3*dpr, ph);
+    ctx.fillRect(xb-1.5*dpr, padT, 3*dpr, ph);
+    return;
+  }
+
+  // ---- hover crosshair on the detail chart ----
+  cursorIdx = -1;
+  if (hoverX !== null){
+    const t=tMin+(hoverX-padL)/pw*span;
+    let idx=lowerBound(t);
+    if (idx>=N) idx=N-1;
+    if (idx>0 && Math.abs(T[idx-1]-t) < Math.abs(T[idx]-t)) idx--;
+    if (idx>=0 && T[idx]>=tMin-1e-9 && T[idx]<=tMax+1e-9){
+      const x=padL+(T[idx]-tMin)/span*pw;
+      ctx.strokeStyle='#8b97a8'; ctx.lineWidth=1*dpr;
+      ctx.setLineDash([3*dpr,3*dpr]);
+      ctx.beginPath(); ctx.moveTo(x+0.5,padT); ctx.lineTo(x+0.5,padT+ph); ctx.stroke();
+      ctx.setLineDash([]);
+      for (let j=0;j<act.length;j++){
+        const ax=axes[j]; if (!ax) continue;
+        const v=act[j].sm[idx]; if (!isFinite(v)) continue;
+        const y=padT+ph-(v-ax.lo)/(ax.hi-ax.lo)*ph;
+        ctx.fillStyle=act[j].color;
+        ctx.beginPath(); ctx.arc(x,y,3*dpr,0,6.2832); ctx.fill();
+      }
+      cursorIdx = idx;
+      showTip(idx, x/dpr);
+    } else hideTip();
+  } else hideTip();
+}
+
+function showTip(idx, xcss){
+  let h = '<div class="t">t = '+T[idx].toFixed(3)+' s &nbsp; row '+(idx+1)+'</div>';
+  for (const c of activeCh()){
+    h += '<div class="r"><span><i style="background:'+c.color+'"></i>'+c.name+'</span>'+
+         '<span>'+fmtVal(c.sm[idx])+' '+c.unit+'</span></div>';
+  }
+  const tip=detail.tip;
+  tip.innerHTML=h; tip.style.display='block';
+  const w=tip.offsetWidth, cw=detail.cv.getBoundingClientRect().width;
+  tip.style.left=Math.min(Math.max(4, xcss+12), Math.max(4, cw-w-4))+'px';
+  tip.style.top='6px';
+}
+function hideTip(){ detail.tip.style.display='none'; }
+
+/* =====================================================================
+   View control
+   ===================================================================== */
+function minSpan(){ return Math.max(medianDt()*3, (full.b-full.a)*1e-5); }
+
+function setView(a, b, src){
+  if (!isFinite(a) || !isFinite(b)) return;
+  const ms = minSpan();
+  let w = b-a;
+  if (!(w>0)) w = ms;
+  if (w < ms){ const m=(a+b)/2; a=m-ms/2; b=m+ms/2; w=ms; }
+  if (w >= full.b-full.a){ a=full.a; b=full.b; }
+  else {
+    if (a < full.a){ a=full.a; b=a+w; }
+    if (b > full.b){ b=full.b; a=b-w; }
+  }
+  view.a=a; view.b=b;
+  syncView(src);
+}
+
+function syncView(src){
+  if (src!=='a') $('i_a').value = view.a.toFixed(2);
+  if (src!=='b') $('i_b').value = view.b.toFixed(2);
+  $('o_dur').textContent = (view.b-view.a).toFixed(2);
+  const slack = (full.b-full.a)-(view.b-view.a);
+  const sl = $('s_pan');
+  if (slack <= 1e-9){ sl.value=0; sl.disabled=true; }
+  else {
+    sl.disabled=false;
+    if (src!=='pan') sl.value = Math.round((view.a-full.a)/slack*1000);
+  }
+  $('pView').textContent = fmtTime(view.a)+' → '+fmtTime(view.b);
+  dirty = true;
+}
+
+function zoom(factor, anchorT){
+  if (!N) return;
+  const w=view.b-view.a;
+  const at = (anchorT===undefined || !isFinite(anchorT)) ? (view.a+view.b)/2 : anchorT;
+  const frac = Math.max(0, Math.min(1, (at-view.a)/w));
+  const nw = w*factor;
+  setView(at-frac*nw, at+(1-frac)*nw, null);
+}
+
+/* =====================================================================
+   UI building
+   ===================================================================== */
+function buildChannelList(){
+  const filt = $('chanfilter').value.trim().toLowerCase();
+  const el=$('chanlist'); el.innerHTML='';
+  let shown=0;
+  for (const c of CH){
+    if (filt && c.name.toLowerCase().indexOf(filt)<0 && c.k.toLowerCase().indexOf(filt)<0) continue;
+    shown++;
+    const d=document.createElement('label');
+    d.className='ch';
+    d.innerHTML='<input type="checkbox"'+(c.on?' checked':'')+'>'+
+                '<i style="background:'+c.color+'"></i>'+
+                '<span class="nm">'+c.name+'</span>'+
+                '<span class="un">'+(c.unit||'')+'</span>';
+    d.title = c.k;
+    d.querySelector('input').onchange = e => {
+      c.on = e.target.checked;
+      buildLegend(); buildReadouts(); updateChanHint(); dirty=true;
+    };
+    el.appendChild(d);
+  }
+  updateChanHint(shown);
+}
+function updateChanHint(shown){
+  if (shown===undefined) shown = $('chanlist').childElementCount;
+  $('chanHint').textContent = CH.length
+    ? shown+' of '+CH.length+' columns listed · '+activeCh().length+' plotted'
+    : 'Load a file to list its columns.';
+}
+
+function buildYSelect(){
+  $('i_ych').innerHTML = CH.map(c=>'<option value="'+c.k+'">'+c.name+'</option>').join('');
+  syncYOverride();
+}
+function curYCh(){ return CH.filter(c=>c.k===$('i_ych').value)[0] || null; }
+function syncYOverride(){
+  const c=curYCh(); if (!c) return;
+  $('i_ymin').value = c.ymin===null ? '' : c.ymin;
+  $('i_ymax').value = c.ymax===null ? '' : c.ymax;
+}
+
+function buildLegend(){
+  const el=$('legend'); el.innerHTML='';
+  for (const c of activeCh()){
+    const d=document.createElement('div');
+    d.className='lg';
+    d.innerHTML='<i style="background:'+c.color+'"></i><span>'+c.name+'</span>'+
+                '<b>–</b><em>'+c.unit+'</em>';
+    d.title=c.name+'\nclick to hide · double-click to show this channel alone';
+    d.onclick = () => { c.on=false; refreshChans(); };
+    d.ondblclick = () => { CH.forEach(x=>{ x.on=(x===c); }); refreshChans(); };
+    c._val = d.querySelector('b');
+    el.appendChild(d);
+  }
+}
+
+function buildReadouts(){
+  const el=$('readouts'); el.innerHTML='';
+  for (const c of activeCh()){
+    const d=document.createElement('div');
+    d.className='card';
+    d.innerHTML='<div class="n">'+c.name+'</div>'+
+                '<div class="v"><span>–</span><small>'+c.unit+'</small></div>';
+    c._card = d.querySelector('.v span');
+    el.appendChild(d);
+  }
+}
+
+function refreshChans(){
+  buildChannelList(); buildLegend(); buildReadouts(); dirty=true;
+}
+
+function updateValues(){
+  const idx = cursorIdx>=0 ? cursorIdx : Math.max(0, Math.min(N-1, lowerBound(view.b)-1));
+  for (const c of activeCh()){
+    const v = c.sm[idx];
+    if (c._card) c._card.textContent = fmtFixed(v, c.d);
+    if (c._val)  c._val.textContent  = fmtFixed(v, c.d);
+  }
+  $('hdDetail').textContent = N
+    ? (lowerBound(view.b)-lowerBound(view.a))+' samples · '+
+      (cursorIdx>=0 ? 'cursor t = '+T[cursorIdx].toFixed(3)+' s'
+                    : 'hover for values · showing last in window')
+    : '–';
+  $('hdOver').textContent = N ? N.toLocaleString()+' samples · '+fmtTime(full.b) : '–';
+}
+
+function updateStats(){
+  const i0=lowerBound(view.a), i1=lowerBound(view.b);
+  const act=activeCh();
+  if (!act.length){
+    $('stats').innerHTML='<div style="padding:10px;color:#5f6b7d">No channels selected.</div>';
+    return;
+  }
+  let h='<table><thead><tr><th>Channel</th><th>n</th><th>min</th><th>max</th>'+
+        '<th>peak–peak</th><th>mean</th><th>&sigma;</th><th>first</th><th>last</th>'+
+        '<th>&Delta;</th></tr></thead><tbody>';
+  for (const c of act){
+    let n=0, mn=Infinity, mx=-Infinity, s=0, s2=0, first=NaN, lastv=NaN;
+    for (let i=i0;i<i1;i++){
+      const v=c.sm[i];
+      if (!isFinite(v)) continue;
+      if (!n) first=v;
+      lastv=v; n++; s+=v; s2+=v*v;
+      if (v<mn) mn=v;
+      if (v>mx) mx=v;
+    }
+    const mean = n ? s/n : NaN;
+    const sd = n>1 ? Math.sqrt(Math.max(0, s2/n - mean*mean)) : NaN;
+    h+='<tr><td><i style="background:'+c.color+'"></i>'+c.name+
+       ' <span style="color:#5f6b7d">'+(c.unit||'')+'</span></td>'+
+       '<td>'+n+'</td><td>'+fmtVal(mn)+'</td><td>'+fmtVal(mx)+'</td>'+
+       '<td>'+fmtVal(mx-mn)+'</td><td>'+fmtVal(mean)+'</td><td>'+fmtVal(sd)+'</td>'+
+       '<td>'+fmtVal(first)+'</td><td>'+fmtVal(lastv)+'</td>'+
+       '<td>'+fmtVal(lastv-first)+'</td></tr>';
+  }
+  $('stats').innerHTML = h+'</tbody></table>';
+}
+
+/* =====================================================================
+   Interaction — overview brush
+   ===================================================================== */
+let dragOver = null;
+function overT(e){
+  const g=over.geom; if(!g) return null;
+  const r=over.cv.getBoundingClientRect();
+  const dpr=window.devicePixelRatio||1;
+  const x=(e.clientX-r.left)*dpr;
+  return g.tMin + (x-g.padL)/g.pw*(g.tMax-g.tMin);
+}
+over.cv.addEventListener('mousedown', e => {
+  if (!N) return;
+  const t=overT(e); if (t===null) return;
+  const g=over.geom;
+  const grab=(g.tMax-g.tMin)/g.pw*8*(window.devicePixelRatio||1);
+  if (Math.abs(t-view.a)<grab)      dragOver={mode:'a'};
+  else if (Math.abs(t-view.b)<grab) dragOver={mode:'b'};
+  else if (t>view.a && t<view.b)    dragOver={mode:'move', off:t-view.a, w:view.b-view.a};
+  else { dragOver={mode:'new', t0:t}; setView(t, t+minSpan(), null); }
+  dirty=true;
+  e.preventDefault();
+});
+over.cv.addEventListener('dblclick', () => setView(full.a, full.b, null));
+
+/* ---- detail chart: hover, wheel zoom, drag pan ---- */
+detail.cv.addEventListener('mousemove', e => {
+  const r=detail.cv.getBoundingClientRect();
+  hoverX=(e.clientX-r.left)*(window.devicePixelRatio||1);
+  dirty=true;
+});
+detail.cv.addEventListener('mouseleave', () => { hoverX=null; dirty=true; });
+detail.cv.addEventListener('wheel', e => {
+  if (!N) return;
+  e.preventDefault();
+  const g=detail.geom; if(!g) return;
+  const r=detail.cv.getBoundingClientRect();
+  const x=(e.clientX-r.left)*(window.devicePixelRatio||1);
+  const t=g.tMin+(x-g.padL)/g.pw*(g.tMax-g.tMin);
+  zoom(e.deltaY>0 ? 1.25 : 0.8, t);
+}, {passive:false});
+
+let panDrag=null;
+detail.cv.addEventListener('mousedown', e => {
+  const g=detail.geom; if(!g || !N) return;
+  const dpr=window.devicePixelRatio||1;
+  panDrag={x:e.clientX, a:view.a, b:view.b, perPx:(g.tMax-g.tMin)/(g.pw/dpr)};
+  detail.cv.style.cursor='grabbing';
+  e.preventDefault();
+});
+
+window.addEventListener('mousemove', e => {
+  if (dragOver){
+    const t=overT(e);
+    if (t!==null){
+      if (dragOver.mode==='a')         setView(Math.min(t, view.b-minSpan()), view.b, null);
+      else if (dragOver.mode==='b')    setView(view.a, Math.max(t, view.a+minSpan()), null);
+      else if (dragOver.mode==='move') setView(t-dragOver.off, t-dragOver.off+dragOver.w, null);
+      else                             setView(Math.min(dragOver.t0,t), Math.max(dragOver.t0,t), null);
+    }
+  }
+  if (panDrag){
+    const dt=(e.clientX-panDrag.x)*panDrag.perPx;
+    setView(panDrag.a-dt, panDrag.b-dt, null);
+  }
+});
+window.addEventListener('mouseup', () => {
+  if (dragOver){ dragOver=null; dirty=true; }
+  if (panDrag){ panDrag=null; detail.cv.style.cursor='crosshair'; }
+});
+
+/* =====================================================================
+   Control wiring
+   ===================================================================== */
+function readFile(f){
+  if (!f) return;
+  const rd=new FileReader();
+  rd.onload = () => loadText(String(rd.result), f.name);
+  rd.onerror = () => alert('Could not read that file.');
+  rd.readAsText(f);
+}
+$('btnLoad').onclick = () => $('file').click();
+$('file').onchange = e => { readFile(e.target.files[0]); e.target.value=''; };
+
+let dragDepth=0;
+window.addEventListener('dragenter', e => { e.preventDefault(); dragDepth++; $('drop').classList.add('on'); });
+window.addEventListener('dragover',  e => { e.preventDefault(); });
+window.addEventListener('dragleave', e => { e.preventDefault(); if (--dragDepth<=0){ dragDepth=0; $('drop').classList.remove('on'); } });
+window.addEventListener('drop', e => {
+  e.preventDefault(); dragDepth=0; $('drop').classList.remove('on');
+  readFile(e.dataTransfer.files[0]);
+});
+
+$('i_tcol').onchange = () => buildFrom($('i_tcol').value);
+
+$('i_a').onchange = () => setView(parseFloat($('i_a').value), view.b, 'a');
+$('i_b').onchange = () => setView(view.a, parseFloat($('i_b').value), 'b');
+$('s_pan').oninput = () => {
+  const slack=(full.b-full.a)-(view.b-view.a);
+  const a=full.a + slack*(parseFloat($('s_pan').value)/1000);
+  setView(a, a+(view.b-view.a), 'pan');
+};
+$('btnZoomIn').onclick  = () => zoom(0.5);
+$('btnZoomOut').onclick = () => zoom(2);
+$('btnFit').onclick     = () => setView(full.a, full.b, null);
+
+$('i_sm').onchange = () => { smooth.mode=$('i_sm').value; applySmoothing(); };
+$('i_win').onchange = () => {
+  let w=Math.max(1, Math.min(501, parseInt($('i_win').value,10)||1));
+  if (!(w & 1)) w++;                      // centred windows want an odd length
+  $('i_win').value=w; smooth.win=w; applySmoothing();
+};
+$('i_alpha').onchange = () => {
+  let a=parseFloat($('i_alpha').value);
+  if (!isFinite(a)) a=0.3;
+  smooth.alpha=Math.max(0.01, Math.min(1, a));
+  $('i_alpha').value=smooth.alpha;
+  applySmoothing();
+};
+$('c_ghost').onchange = () => { smooth.ghost=$('c_ghost').checked; applySmoothing(); };
+
+$('i_ymode').onchange = () => { yconf.mode=$('i_ymode').value; dirty=true; };
+$('c_floor').onchange = () => { yconf.floors=$('c_floor').checked; dirty=true; };
+$('i_ych').onchange = syncYOverride;
+$('i_ymin').onchange = () => {
+  const c=curYCh(); if(!c) return;
+  const v=parseFloat($('i_ymin').value);
+  c.ymin = isFinite(v) ? v : null; dirty=true;
+};
+$('i_ymax').onchange = () => {
+  const c=curYCh(); if(!c) return;
+  const v=parseFloat($('i_ymax').value);
+  c.ymax = isFinite(v) ? v : null; dirty=true;
+};
+$('btnYAuto').onclick = () => {
+  const c=curYCh(); if(!c) return;
+  c.ymin=null; c.ymax=null; syncYOverride(); dirty=true;
+};
+
+$('chanfilter').oninput = buildChannelList;
+$('btnAll').onclick     = () => { CH.forEach(c=>{c.on=true;});  refreshChans(); };
+$('btnNone').onclick    = () => { CH.forEach(c=>{c.on=false;}); refreshChans(); };
+$('btnDefault').onclick = () => { CH.forEach(c=>{c.on=!!(META[c.k] && META[c.k].on);}); refreshChans(); };
+
+for (const h of document.querySelectorAll('.sec>h2'))
+  h.onclick = () => h.parentElement.classList.toggle('collapsed');
+$('statHd').onclick = () => $('statwrap').classList.toggle('collapsed');
+
+$('btnExport').onclick = () => {
+  if (!N) return;
+  const i0=lowerBound(view.a), i1=lowerBound(view.b);
+  const head=['t_s'].concat(CH.map(c=>c.k));
+  const lines=[head.join(',')];
+  for (let i=i0;i<i1;i++){
+    const r=[T[i].toFixed(4)];
+    for (const c of CH) r.push(isFinite(c.sm[i]) ? c.sm[i] : '');
+    lines.push(r.join(','));
+  }
+  const blob=new Blob([lines.join('\n')],{type:'text/csv'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='window_'+view.a.toFixed(1)+'-'+view.b.toFixed(1)+'s.csv';
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
+};
+$('btnPng').onclick = () => {
+  const a=document.createElement('a');
+  a.href=detail.cv.toDataURL('image/png');
+  a.download='chart_'+view.a.toFixed(1)+'-'+view.b.toFixed(1)+'s.png';
+  a.click();
+};
+
+window.addEventListener('keydown', e => {
+  if (!N) return;
+  const tag=(e.target.tagName||'').toLowerCase();
+  if (tag==='input'||tag==='select'||tag==='textarea') return;
+  const w=view.b-view.a, step=e.shiftKey ? w : w*0.1;
+  if (e.key==='ArrowRight'){ setView(view.a+step, view.b+step, null); e.preventDefault(); }
+  else if (e.key==='ArrowLeft'){ setView(view.a-step, view.b-step, null); e.preventDefault(); }
+  else if (e.key==='+'||e.key==='='){ zoom(0.5); e.preventDefault(); }
+  else if (e.key==='-'||e.key==='_'){ zoom(2); e.preventDefault(); }
+  else if (e.key==='Home'){ setView(full.a, full.b, null); e.preventDefault(); }
+});
+
+window.addEventListener('resize', () => { dirty=true; });
+
+/* =====================================================================
+   Render loop
+   ===================================================================== */
+function frame(){
+  if (dirty){
+    dirty=false;
+    if (N){
+      paint(detail, view.a, view.b, false);
+      paint(over,   full.a, full.b, true);
+      updateValues();
+      updateStats();
+    }
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+updateSmoothInfo();
+</script>
+</body>
+</html>
